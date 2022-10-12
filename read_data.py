@@ -11,10 +11,12 @@ def read_data(filename=str):
 
 
 appended_data = []
-with os.scandir("Data/mortality_prediction/mortality_prediction2/set-a/") as entries:
+with os.scandir(
+    "../FinalProjectData/mortality_prediction/mortality_prediction2/set-a/"
+) as entries:
     for entry in entries:
         single_data = read_data(
-            f"Data/mortality_prediction/mortality_prediction2/set-a/{entry.name}"
+            f"../FinalProjectData/mortality_prediction/mortality_prediction2/set-a/{entry.name}"
         )
 
         appended_data.append(single_data)
@@ -23,7 +25,7 @@ with os.scandir("Data/mortality_prediction/mortality_prediction2/set-a/") as ent
     new_df = appended_data_concat.pivot_table(
         index=["subjid", "Time"], columns="Parameter", values="Value"
     )
-    new_df.to_csv("Data/ADS.xlsx")
+    new_df.to_csv("ADS.xlsx")
     # print(new_df.head(10))
 
 # print(read_data("Data/mortality_prediction/mortality_prediction2/set-a/132539.txt"))
