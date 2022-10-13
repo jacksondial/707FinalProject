@@ -25,7 +25,7 @@ with os.scandir(
     new_df = appended_data_concat.pivot_table(
         index=["subjid", "Time"], columns="Parameter", values="Value"
     )
-    new_df.to_csv("ADS.xlsx")
+    new_df.to_csv("ADS.csv")
     # print(new_df.head(10))
 
 # print(read_data("Data/mortality_prediction/mortality_prediction2/set-a/132539.txt"))
