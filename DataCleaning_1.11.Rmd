@@ -1,0 +1,215 @@
+---
+title: "Data Cleaning Grace"
+author: "Grace Kovic"
+date: '2022-11-10'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE, warning=FALSE}
+# Packages 
+library(tidyverse)
+library(ggplot2)
+library(DataExplorer)
+library(dplyr)
+```
+
+#### Jackson's Code
+
+```{r}
+# Read data 
+data <- read.csv("ADS.csv")
+```
+
+```{r}
+sum(is.na(data))
+
+lab_cols <- colnames(data)[3:43]
+
+# LOCF: If a subject has missing values in a column, the last observation recorded for that subject is used to fill in the following empty cells below it until a filled cell is encountered
+# "filled" is the dataset with these imputed values 
+filled <- data %>% 
+  group_by(subjid) %>% 
+  tidyr::fill(lab_cols, .direction = c("down"))
+
+# Checking number of missing values after LOCF
+sum(is.na(filled)) 
+
+rowSums(is.na(filled)) # does not look too bad
+mean(rowSums(is.na(filled))) # 13.3 missing values per row on average
+
+# Number of values missing per row 
+missing_per_row <- rowSums(is.na(filled))
+
+# This outputs the average number of missing values per row for each subject 
+average_missing_per_subjid <- filled %>% 
+  cbind.data.frame(missing_per_row) %>% 
+  group_by(subjid) %>% 
+  summarise(avg_missing_per_subjid = mean(missing_per_row))
+
+```
+
+#### End of Jackson's Code 
+
+#### Assessing First 11 columns (subjid to creatinine, inclusive)
+
+```{r}
+# Grace is assessing for outliers in columns 1 to 11 inclusive 
+grace_df <- filled[, 1:11]
+
+```
+
+#### Plot of Missingness in Grace's variables 
+
+```{r}
+plot_missing(grace_df)
+```
+
+#### Histogram of variables 
+
+```{r}
+# Histogram of all variables 
+plot_histogram(grace_df)
+```
+
+#### Age 
+
+```{r}
+summary(grace_df$Age) # values for age are normal (15 to 90)
+```
+
+#### ALP
+
+```{r}
+## Lab/Chemical/Enzyme values --------------------------
+summary(grace_df$ALP) # Important part of liver function 
+
+# Range: 12 - 2205 IU/L
+# Missing values: 201410
+# Normal healthy range: 44-147 IU/L 
+# High ALP level: > 147 IU/L 
+# Low ALP level: < 44 IU/L
+
+# Since there were many individuals with an ALP in the 1000s includiing 2205, we will deem these values as expected since all individuals in this dataset were in the ICU 
+
+boxplot(grace_df$ALP) # All outliers are in the 100s or 1000s
+
+grace_df %>% filter(ALP == 2205) # This individual has multiple values of 2205 since we performed LOCF on all columns for which an individual had one or more values of a feature, but was missing values for the rows in the following time points  
+```
+
+#### ALT
+
+```{r}
+summary(grace_df$ALT) # Plays an important role in metabolism within the liver 
+
+# Range: 1 - 11470 IU/L
+# Missing values: 199864
+# Normal healthy range of ALT is 0 - 40 IU/L
+
+# Note: 
+# Values of ALT above 1000 indicate critical health conditions like lack of blood flow to the liver or acute viral hepatitis 
+# Values above 5000 are indicative of overdosing 
+
+grace_df %>% filter(ALT == 11470)
+# There is one individual who had a value of ALT of 11,470. We will deem this as an acceptable ALT value for our dataset since we are analyzing ICU patients who are in critical health condition
+
+hist(grace_df$ALT)
+
+boxplot(grace_df$ALT) # All outliers are above 1000 IU/L
+```
+
+#### AST
+
+```{r}
+summary(grace_df$AST) # AST is measured as a biomarker of liver function 
+
+# Range: 4 - 18430 IU/L
+# Missing values: 199703 
+# Normal healthy range: 8 - 48 IU/L
+# AST values > 40 IU/L may be a sign of liver inflammation and values > 1000 IU/L may be a sign of acute liver failure 
+
+# Most of the outlying values of AST are above 1000 so we will deem these values as acceptable for our dataset
+boxplot(grace_df$AST) 
+
+```
+
+#### BUN
+
+```{r}
+summary(grace_df$BUN) # Blood urea nitrogen - indication of kidney health
+
+# Range: 0 - 197 
+# Missing values: 46575 
+# Normal healthy range: 6 - 20 mg/dL
+# High levels of BUN (> 28 mg/dL) indicate that your kidneys aren't working well 
+
+grace_df %>% filter(BUN == 0)
+
+boxplot(grace_df$BUN) # Most outliers are above 50
+
+# There are some values below 6 including 0 which may indicate very poor kidney health 
+
+```
+
+#### Bilirubiin
+
+```{r}
+summary(grace_df$Bilirubin) # Some research suggest that Bilirubin acts as a cellular antioxidant that may be particularly important in the brain 
+
+# Range: 0.1 - 47.70 
+# Missing values: 201113
+# Normal healthy range: 0.3 - 1.0 mg/dL
+# Any Bilirubin value > 1.2 mg/dL is usually considered elevated 
+
+# High levels of Bilirubin are higher than 25 mg/dL
+
+boxplot(grace_df$Bilirubin) # Most outliers are above 5 mg/dL and go until 47.70 mg/dL
+
+```
+
+#### Albumin
+
+```{r}
+summary(grace_df$Albumin) # Values for albumin levels appear normal 
+
+# Range: 1 - 5.3 g/dL
+# Missing values: 211632
+# Normal healthy range: 3.4 - 5.4 d/dL
+
+boxplot(grace_df$Albumin) # There are a handful of values just above and just below 5 g/dL and around 1 g/dL
+
+```
+
+#### Cholesterol
+
+```{r}
+summary(grace_df$Cholesterol) # Cholesterol levels appear normal, ranging from 28 to 330 mg/dL
+
+# Range: 28 - 330 mg/dL
+# Missing values: 283982
+# Normal healthy range: 100 - 129 mg/dL
+# Very high level: >= 190 mg/dL
+
+grace_df %>% filter(Cholesterol == 330) # This individual likely has very high cholesterol 
+
+boxplot(grace_df$Cholesterol) # The outliers of cholesterol are above 250 
+
+```
+
+#### Creatinine 
+
+```{r}
+summary(grace_df$Creatinine) # Serum Creatinine - important indicator of kidney health 
+
+# Range: 0.1 - 22.10 
+# Missing values: 
+# Normal healthy range: 0.6 - 1.3 mg/dL
+# Creatinine levels > 1.3 are considered high and may be a sign of poor kidney function 
+
+grace_df %>% filter(Creatinine == 22.10) 
+
+boxplot(grace_df$Creatinine) # Outliers are above ~ 3 mg/dL
+```
