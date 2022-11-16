@@ -40,4 +40,19 @@ cleaned_dat <-filled %>%
          ) %>% 
   subset(select = -c(Height))  #remove height after cleaning it
 
+write.csv(cleaned_dat, "FinalDF.csv")
+
+library(DataExplorer)
+plot_missing(cleaned_dat)
+
+subjid_uniques <- unique(cleaned_dat$subjid)
+
+set.seed(11022009)
+
+sample <- sample.split(subjid_uniques, SplitRatio = 0.7)
+train  <- subset(cleaned_dat$subjid, sample == TRUE)
+test   <- subset(cleaned_dat$subjid, sample == FALSE)
+write.csv(train, "train.csv")
+write.csv(test, "test.csv")
+
 
