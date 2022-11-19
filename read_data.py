@@ -17,11 +17,11 @@ def read_data(filename=str):
 
 appended_data = []
 with os.scandir(
-    "../FinalProjectData/mortality_prediction/mortality_prediction2/set-a/"
+    "../707FinalProject"
 ) as entries:  # grab all of the filenames which are the subjids
     for entry in entries:
         single_data = read_data(
-            f"../FinalProjectData/mortality_prediction/mortality_prediction2/set-a/{entry.name}"
+            f"../707FinalProject{entry.name}"
         )
 
         appended_data.append(single_data)

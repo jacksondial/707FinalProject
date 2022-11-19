@@ -1,0 +1,49 @@
+---
+title: "EDA - Grace"
+author: "Grace Kovic"
+date: '2022-11-06'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Libraries
+
+```{r}
+library(here)
+library(ggplot2)
+library(dplyr)
+library(DataExplorer)
+```
+
+```{r}
+ADS = read.csv("/Users/KovicFamily/Documents/Duke MB/Courses/2022-2023 Courses/Fall 2022/BIOSTAT 707 - Stat Machine Learning/Final Project/707FinalProject/ADS.csv", header = TRUE)
+
+str(ADS)
+summary(ADS)
+colSums(is.na(ADS)) %>% sort() # Count of missing values for each column
+round(colMeans(is.na(ADS)), 3) # Get percentage of missing values in each column
+
+```
+
+```{r}
+# Plot of missingness
+plot_missing(ADS, title = "Plot of Missingness")
+
+```
+
+```{r}
+# Filter out rows where baseline features are missing due to over-time format - where age, gender, height, and weight is missing
+
+ADS %>% 
+  filter(!is.na(Age)) %>% 
+  filter(!is.na(Gender)) %>% 
+  filter(!is.na(ICUType))
+```
+```{r}
+
+```
+
+Average number of missing values per row for each subject id 
