@@ -1,5 +1,5 @@
 library(tidyverse)
-
+library(caTools)
 data <- read.csv("ADS.csv")
 sum(is.na(data))
 
@@ -50,9 +50,25 @@ subjid_uniques <- unique(cleaned_dat$subjid)
 set.seed(11022009)
 
 sample <- sample.split(subjid_uniques, SplitRatio = 0.7)
-train  <- subset(cleaned_dat$subjid, sample == TRUE)
-test   <- subset(cleaned_dat$subjid, sample == FALSE)
+table(sample)
+train_no_outcome <- cleaned_dat %>% filter(subjid %in% subjid_uniques[sample])
+test_no_outcome <- cleaned_dat %>% filter(!(subjid %in% subjid_uniques[sample]))
+
+#check the numbers of rows
+train_no_outcome %>% inner_join(test_no_outcome, by = "subjid") %>% nrow()
+cleaned_dat %>% distinct(subjid) %>% nrow()
+
+outcomes_df <- read.csv("outcomes.csv")
+outcomes_to_join <- outcomes_df %>% select(RecordID, In.hospital_death) %>% rename(subjid = RecordID, in_hosp_death = In.hospital_death)
+
+train <- train_no_outcome %>%
+  left_join(outcomes_to_join)
+
+test <- test_no_outcome %>% 
+  left_join(outcomes_to_join)
+
 write.csv(train, "train.csv")
 write.csv(test, "test.csv")
+
 
 
