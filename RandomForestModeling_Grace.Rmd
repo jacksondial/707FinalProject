@@ -1,0 +1,30 @@
+---
+title: "Random Forest Modeling"
+author: "Grace Kovic"
+date: '2022-11-19'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Libraries 
+library(randomForest)
+library(ggplot2)
+library(ggRandomForests)
+library(LongituRF)
+library(dplyr)
+```
+
+```{r}
+# Read in data 
+train_data = read.csv("/Users/KovicFamily/Documents/Duke MB/Courses/2022-2023 Courses/Fall 2022/BIOSTAT 707 - Stat Machine Learning/Final Project/707FinalProject/train.csv")
+
+test_data = read.csv("/Users/KovicFamily/Documents/Duke MB/Courses/2022-2023 Courses/Fall 2022/BIOSTAT 707 - Stat Machine Learning/Final Project/707FinalProject/test.csv")
+
+deaths_data = read.csv("/Users/KovicFamily/Documents/Duke MB/Courses/2022-2023 Courses/Fall 2022/BIOSTAT 707 - Stat Machine Learning/Final Project/707FinalProject/")
+```
+
+
