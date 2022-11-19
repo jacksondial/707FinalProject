@@ -50,8 +50,13 @@ subjid_uniques <- unique(cleaned_dat$subjid)
 set.seed(11022009)
 
 sample <- sample.split(subjid_uniques, SplitRatio = 0.7)
-train  <- subset(cleaned_dat$subjid, sample == TRUE)
-test   <- subset(cleaned_dat$subjid, sample == FALSE)
+table(sample)
+train  <- cleaned_dat %>% filter(subjid %in% subjid_uniques[sample]) %>% distinct(subjid)
+test <- cleaned_dat %>% filter(!(subjid %in% subjid_uniques[sample])) %>% distinct(subjid)
+
+train %>% inner_join(test, by = "subjid") %>% nrow()
+
+cleaned_dat %>% distinct(subjid) %>% nrow()
 write.csv(train, "train.csv")
 write.csv(test, "test.csv")
 
