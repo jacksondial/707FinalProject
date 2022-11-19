@@ -20,11 +20,29 @@ library(dplyr)
 
 ```{r}
 # Read in data 
-train_data = read.csv("/Users/KovicFamily/Documents/Duke MB/Courses/2022-2023 Courses/Fall 2022/BIOSTAT 707 - Stat Machine Learning/Final Project/707FinalProject/train.csv")
+train_IDs = read.csv("/Users/KovicFamily/Documents/Duke MB/Courses/2022-2023 Courses/Fall 2022/BIOSTAT 707 - Stat Machine Learning/Final Project/707FinalProject/train.csv") %>% 
+  select(-1) %>%  # Remove extra index column (first column)
+  dplyr::rename(RecordID = x)
 
-test_data = read.csv("/Users/KovicFamily/Documents/Duke MB/Courses/2022-2023 Courses/Fall 2022/BIOSTAT 707 - Stat Machine Learning/Final Project/707FinalProject/test.csv")
+test_IDs = read.csv("/Users/KovicFamily/Documents/Duke MB/Courses/2022-2023 Courses/Fall 2022/BIOSTAT 707 - Stat Machine Learning/Final Project/707FinalProject/test.csv") %>% 
+  select(-1) %>% 
+  dplyr::rename(RecordID = x)
 
-deaths_data = read.csv("/Users/KovicFamily/Documents/Duke MB/Courses/2022-2023 Courses/Fall 2022/BIOSTAT 707 - Stat Machine Learning/Final Project/707FinalProject/")
+outcome_data = read.csv("/Users/KovicFamily/Documents/Duke MB/Courses/2022-2023 Courses/Fall 2022/BIOSTAT 707 - Stat Machine Learning/Final Project/707FinalProject/outcomes.csv") %>% 
+  select(-1)
 ```
 
+```{r}
+str(test_data)
+str(train_data)
+
+```
+
+```{r}
+# Subset the 
+
+
+# Merge the outcomes data with training data, keeping only the IDs in train_data
+# merge(train_data, outcome_data, by = "RecordID", all = TRUE)
+```
 
