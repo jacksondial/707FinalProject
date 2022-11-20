@@ -1,0 +1,224 @@
+---
+title: "GLM - Project 707"
+author: "Hannah Damico"
+date: "2022-11-20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(magrittr)
+library(lme4)
+library(DataExplorer)
+library(finalfit)
+library(flextable)
+library(chron)
+library(lubridate)
+```
+
+```{r}
+# setwd("/Users/hannahdamico/Desktop/F22/707 - Machine Learning")
+```
+
+
+### Import Training and Testing Data
+
+```{r}
+# Training 
+train_df <- read.csv("/Users/hannahdamico/Desktop/F22/707 - Machine Learning/707FinalProject/train.csv")
+# Testing
+test_df <- read.csv("/Users/hannahdamico/Desktop/F22/707 - Machine Learning/707FinalProject/test.csv")
+```
+
+
+### Addressing Missing Data for GLM
+
+```{r fig.height=6, fig.width=8}
+missing_plot <- plot_missing(train_df)
+missing_plot
+```
+
+### Tabled Missing Data
+
+```{r}
+train_glimpse <- train_df %>% ff_glimpse()
+test_glimpse <- test_df %>%  ff_glimpse()
+  
+train_glimpse$Continuous %>%
+  dplyr::select(-var_type, -n, -quartile_25, -quartile_75) %>%
+  arrange(desc(missing_percent)) %>%
+  flextable() %>%
+  autofit() %>%
+  set_caption("Continuous Missing Value Table")
+
+# train_glimpse$Categorical
+# str(train_df)
+```
+
+### Pull names of variables to remove
+
+**DECISION ON MISSINGNESS: ** For the purpose of the Logistic GLM we will remove variables with greater than 50% missing data. These variables include "ALP", "ALT", "AST", "Albumin", "Bilirubin", "Cholesterol", "RespRate", "TroponinI", TroponinT". 
+
+
+```{r}
+### Training Data Subsetting
+variables_kept <- train_glimpse$Continuous %>% 
+  filter(as.numeric(missing_percent) <= 50.0) %>% rownames()
+
+### Add time variable back in , only run once
+# variables_kept <- c(variables_kept, "Time")
+  
+variables_thrown <- train_glimpse$Continuous %>% 
+  filter(as.numeric(missing_percent) > 50.0) %>%  rownames()
+
+#### Test Data Subsetting 
+variables_kept_test <- test_glimpse$Continuous %>% 
+  filter(as.numeric(missing_percent) <= 50.0) %>% rownames()
+
+### Add time variable back in 
+# variables_kept_test <- c(variables_kept_test, "Time")
+
+variables_thrown_test <- test_glimpse$Continuous %>% 
+  filter(as.numeric(missing_percent) > 50.0) %>%  rownames()
+
+### Check that we kept the same variables across sets
+variables_kept == variables_kept_test
+
+### Subset data based on missingness
+subset_train <- train_df[variables_kept]
+subset_test <- test_df[variables_kept]
+```
+
+
+
+### Breaking Into Intervals - Understanding our Time Variable
+We will subset into 4 intervals of time and build models for each interval.
+
+### Training Set Hour
+
+```{r}
+# converts date to type double 
+# dates <- times(format(as.POSIXct(strptime(subset_train$Time, format = "%H:%M")), format = "%H:%M:%S"))
+
+## Adds seconds to time for formatting purposes
+times_hms <- hms(paste0(subset_train$Time, ":00"), quiet = TRUE)
+times_hms@hour
+
+# Extracts the hour of a time variable
+Hour <- hour(strptime(subset_train$Time, format = "%H:%M"))
+
+# Add Hour column to subsetted train frame
+subset_train %<>% 
+  mutate(Hour = times_hms@hour)
+
+
+```
+
+### Testing Set Hours Intervals
+
+```{r}
+
+## Adds seconds to time for formatting purposes
+times_hms_test <- hms(paste0(subset_test$Time, ":00"), quiet = TRUE)
+times_hms_test@hour
+
+# Extracts the hour of a time variable
+Hour_test <- hour(strptime(subset_test$Time, format = "%H:%M"))
+
+# Add Hour column to subsetted Test frame
+subset_test %<>% 
+  mutate(Hour = times_hms_test@hour)
+
+```
+
+
+### Interval Assessment
+
+
+### Omit Missing Values After Extracting Time
+
+```{r}
+subset_train_full <- subset_train %>% na.omit()
+
+subset_test_full <- subset_test %>% na.omit()
+```
+
+
+## Interval Building
+
+### Interval for Full Data - Including Missing Values
+
+```{r}
+subset_train %<>% 
+  mutate(Interval = case_when(between(Hour, 0, 12) ~ 1, 
+                              between(Hour, 13, 23) ~ 2,
+                              between(Hour, 24, 34) ~ 3,
+                              between(Hour, 35, 48) ~ 4)) 
+
+### Number of Unique Subject IDs across intervals
+uniq_ids <- subset_train %>% 
+  select(subjid, Interval) %>% 
+  group_by(Interval) %>% 
+  summarize(Unique_Subjid = length(unique(subjid)))
+
+# length(unique(subset_train$subjid))
+# length(unique(subset_train_full$subjid))
+```
+
+### Interval for Reduced Data - Excluding Missing Values
+
+```{r}
+subset_train_full %<>% 
+  mutate(Interval = case_when(between(Hour, 0, 12) ~ 1, 
+                              between(Hour, 13, 23) ~ 2,
+                              between(Hour, 24, 34) ~ 3,
+                              between(Hour, 35, 48) ~ 4)) 
+
+### Number of Unique Subject IDs across intervals
+unq_id_omit <- subset_train_full %>% 
+  select(subjid, Interval) %>% 
+  group_by(Interval) %>% 
+  summarize(Unique_Subjid_Omit = length(unique(subjid)))
+
+
+## Gives the % of unique patient data after omitting NAs
+merged_uniques <- left_join(unq_id_omit, uniq_ids, by = "Interval") %>% group_by(Interval) %>% summarize(Unique_Subjid, Unique_Subjid_Omit, Percentage = round(Unique_Subjid_Omit / Unique_Subjid*100,3))
+
+## Gives number of NA per column per interval
+## Makes sense that I1 would have most missing 
+## Lab Values were likely not taken in the first 12 hours of admission
+subset_train %>%
+  group_by(Interval) %>% 
+  select(-Time, -X) %>% 
+  summarise_at(vars(-subjid), "is.na") %>% 
+  summarise_all("sum")
+
+```
+
+### Mean Lab Value per Interval per Patient
+
+Taking the mean per interval per subject ID reduces the data by excluding all NA values and maintaining only 1 row of data per subject per interval.
+
+```{r}
+## Take the mean of lab value per subject ID per Interval
+mean_values_frame <- subset_train %>% 
+  na.omit() %>% 
+  group_by(Interval, subjid) %>% 
+  select(-Time, -X) %>% 
+  summarise_all("mean")
+```
+
+
+### Fit a Saturated Logistic GLM  
+This saturated model will help to identify variables that are significant with respect to our primary outcome of in hospital death.
+
+```{r}
+saturated_model <- glm(in_hosp_death ~ . -Time - MechVent - MechVent_cleaned, data = subset_train_full[3:38])
+summary(saturated_model)
+```
+
+
+
+
+
