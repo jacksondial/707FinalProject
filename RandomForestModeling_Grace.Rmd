@@ -12,38 +12,226 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 # Libraries 
 library(randomForest)
-library(ggplot2)
 library(ggRandomForests)
 library(LongituRF)
+library(xgboost)
+library(caret)
 library(tidyverse)
+library(ggplot2)
+library(Matrix)
+library(Ckmeans.1d.dp)
+library(DataExplorer)
 library(dplyr)
 ```
 
 ```{r}
 # Read in data 
-train_IDs = read.csv("/Users/KovicFamily/Documents/Duke MB/Courses/2022-2023 Courses/Fall 2022/BIOSTAT 707 - Stat Machine Learning/Final Project/707FinalProject/train.csv") %>% 
-  select(-1) %>%  # Remove extra index column (first column)
-  dplyr::rename(RecordID = x)
+train_data = read.csv("/Users/KovicFamily/Documents/Duke MB/Courses/2022-2023 Courses/Fall 2022/BIOSTAT 707 - Stat Machine Learning/Final Project/707FinalProject/train.csv") %>% 
+  select(-1) # Remove the extra index column 
 
-test_IDs = read.csv("/Users/KovicFamily/Documents/Duke MB/Courses/2022-2023 Courses/Fall 2022/BIOSTAT 707 - Stat Machine Learning/Final Project/707FinalProject/test.csv") %>% 
-  select(-1) %>% 
-  dplyr::rename(RecordID = x)
-
-outcome_data = read.csv("/Users/KovicFamily/Documents/Duke MB/Courses/2022-2023 Courses/Fall 2022/BIOSTAT 707 - Stat Machine Learning/Final Project/707FinalProject/outcomes.csv") %>% 
-  select(-1)
+test_data = read.csv("/Users/KovicFamily/Documents/Duke MB/Courses/2022-2023 Courses/Fall 2022/BIOSTAT 707 - Stat Machine Learning/Final Project/707FinalProject/test.csv") %>% 
+  select(-1) # Remove the extra index column 
 ```
 
 ```{r}
-str(test_data)
-str(train_data)
+# str(test_data)
+# str(train_data)
+# summary(test_data)
+# summary(train_data)
+# 
+
+# Make in_hosp_death and Gender factors to fit a classification RF model
+train_data$in_hosp_death = as.factor(train_data$in_hosp_death)
+train_data$Gender = as.factor(train_data$Gender)
+
+test_data$in_hosp_death = as.factor(test_data$in_hosp_death)
+test_data$Gender = as.factor(test_data$Gender)
+```
+
+```{r}
+# (1) Remove subjid column in train_data and test_data for modeling purposes  
+# (2) Subset train_data and test_data to just contain baseline characteristics collected at time of ICU admission (Age, Gender, Weight, Height, ICU Type, in_hosp_death) plus in_hosp_death
+
+train_data_bl = train_data %>% 
+  dplyr::select(-c("subjid")) %>% # remove subjid for modeling purposes 
+  dplyr::select(Age, Gender, height_cleaned, ICUType, in_hosp_death)
+
+test_data_bl = test_data %>% 
+  dplyr::select(-c("subjid")) %>% 
+  dplyr::select(Age, Gender, height_cleaned, ICUType, in_hosp_death)
+```
+
+### RF Modeling of Baseline Features
+
+```{r}
+# Classification Random Forest model using baseline features
+set.seed(11022009)
+rfm_bl = randomForest(in_hosp_death ~ ., data = train_data_bl) 
+print(rfm_bl)
+
+```
+
+#### Plot of Error Rate for RF 
+
+```{r}
+# Evaluate prediction accuracy
+death_pred = predict(rfm_bl, test_data_bl)
+test_data_bl$death_pred = death_pred
+
+# Build Confusion Matrix 
+cfm = table(test_data_bl$in_hosp_death, test_data_bl$death_pred, exclude = NULL)
+cfm
+# For patients who didn't die, 35014 of 41175 were correctly predicted to have not died. For those who did die, 621 of 41175 were correctly predicted to have died. 
+
+# Classification accuracy 
+classification_accuracy = sum(diag(cfm)/sum(cfm))
+classification_accuracy # The classification accuracy of the RF model using baseline 
+
+# The classification accuracy of the model is approximately 86.5%
 
 ```
 
 ```{r}
-# Subset the 
+# Plot of error for RF model
+plot(rfm_bl)
+```
+
+The error appears to stay the same after around 50 trees.
+
+#### Variable Importance Plot 
+
+```{r}
+var_importance = data_frame(variable = setdiff(colnames(train_data_bl), "in_hosp_death"), 
+                            importance = as.vector(importance(rfm_bl)))
+
+var_importance = var_importance %>% 
+  arrange(desc(importance)) 
+
+# make the variable in var_importance a factor for plotting purposes 
+var_importance$variable = factor(var_importance$variable, 
+                                 levels = var_importance$variable)
 
 
-# Merge the outcomes data with training data, keeping only the IDs in train_data
-# merge(train_data, outcome_data, by = "RecordID", all = TRUE)
+p = ggplot(var_importance, aes(x=variable, weight=importance, fill=variable))
+p = p + geom_bar() + ggtitle("Variable Importance from Random Forest of Baseline Features")
+p = p + xlab("Demographic Attribute") + ylab("Variable Importance (Mean Decrease in Gini Index)")
+p = p + scale_fill_discrete(name="Variable Name")
+p + theme(axis.text.x = element_blank(),
+          axis.text.y=element_text(size=12),
+          axis.title=element_text(size=16),
+          plot.title=element_text(size=18),
+          legend.title=element_text(size=16),
+          legend.text=element_text(size=12)) 
+
+```
+
+### XG Boost Modeling of Baseline Features
+
+```{r}
+set.seed(11022009)
+# Sparse matrix - Removing y column (in_hosp_death)
+# sparse_matrix_train = sparse.model.matrix(in_hosp_death ~ .-1, data = train_data_bl)
+# 
+# sparse_matrix_test = sparse.model.matrix(in_hosp_death ~ .-1, data = test_data_bl)
+
+# Labels - Vector for in_hosp_death
+# output_vector_train = train_data_bl[, "in_hosp_death"] == "Death"
+# output_vector_test = test_data_bl[, "in_hosp_death"] == "Death"
+
+
+
+
+# independent variables for train
+X_train = data.matrix(train_data_bl[, -5])
+
+# dependent variable for train
+y_train = as.numeric(as.character(train_data_bl[, 5])) # Must make the y_train a character and then numeric
+
+# independent variables for test
+X_test = data.matrix(test_data_bl[, -5])
+
+# dependent variable for test
+y_test = as.numeric(as.character(test_data_bl[, 5])) # Must make y_test a character and then numeric
+
+# convert the train and test data into xgboost matrix type 
+xgboost_train = xgb.DMatrix(data = X_train, label = y_train)
+xgboost_test = xgb.DMatrix(data = X_test, label = y_test)
+
+# XGBoost Model - ** Make sure that the data inputted is a matrix excluding y variable. The y variable will be inputted as a separate vector using the label argument
+
+# Train an xgboost model using our training data - outputs training error
+xgb_bl = xgboost(data = xgboost_train, # independent variables training data
+                 eta = 1, 
+                 max.depth = 4, 
+                 nthread = 2, 
+                 nrounds = 10, # Should this be increased or decreased ?
+                 objective = "binary:logistic", # classification XGBoost
+                 eval_metric = "error") 
+
+
+summary(xgb_bl)
+
+```
+
+#### XGBoost Model Predictions
+```{r}
+# use model to get predictions on test data in terms of probabilities 
+pred_test = predict(xgb_bl, xgboost_test)
+
+# Convert probability predictions to 0's and 1's
+pred_y = as.numeric(pred_test > 0.5) # variable -- Any probability > 0.5 is classified as 1 and 0, otherwise 
+
+# Confusion matrix -- need to convert y_test and pred_y to factors first
+conf_mat = confusionMatrix(factor(y_test), factor(pred_y))
+print(conf_mat)
+
+# convert prediction type to factor type 
+# pred_test[(pred_test > 3)] = 3
+# pred_y = as.factor((levels(y_test)) [round(pred_test)])
+
+```
+
+```{r}
+mean((y_test - pred_y)^2) # MSE
+caret::MAE(y_test, pred_y) # MAE
+caret::RMSE(y_test, pred_y) # RMSE
+```
+
+```{r}
+importance_xgb = xgb.importance(feature_names = sparse_matrix_test@Dimnames[[2]], model = xgb_bl)
+
+head(importance_xgb)
+
+importance_xgb = xgb.importance(colnames(xgboost_train), model = xgb_bl)
+xgb_imp_plot = xgb.ggplot.importance(importance_xgb, top_n = 4) 
+xgb_imp_plot + theme(legend.position = "none", 
+          axis.text.y=element_text(size=12),
+          axis.title=element_text(size=16),
+          plot.title=element_text(size=18),
+          legend.title=element_text(size=16),
+          legend.text=element_text(size=12)) + 
+  ggtitle("Feature Importance")
+
+```
+Based on the plot above, Age is the largest contributor to the performance of the XGBoost model with height second largest, and ICU type third largest. 
+```{r}
+xgb_cv = xgb.cv(data = xgboost_train, 
+                 nfold = 5,
+                 eta = 1, 
+                 max.depth = 4, 
+                 nthread = 2, 
+                 nrounds = 10, 
+                 objective = "binary:logistic", 
+                 metrics = list("rmse", "auc"),# What metrics should we use? 
+                 prediction = TRUE)
+
+print(xgb_cv) # print cross-validation results as data frame 
+```
+
+
+```{r}
+plot_correlation(train_data_bl)
+
+
 ```
 
