@@ -9,7 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r}
+```{r message=FALSE, warning=FALSE}
 # Libraries 
 library(randomForest)
 library(ggRandomForests)
@@ -38,7 +38,7 @@ test_data = read.csv("/Users/KovicFamily/Documents/Duke MB/Courses/2022-2023 Cou
 # str(train_data)
 # summary(test_data)
 # summary(train_data)
-# 
+
 
 # Make in_hosp_death and Gender factors to fit a classification RF model
 train_data$in_hosp_death = as.factor(train_data$in_hosp_death)
@@ -76,10 +76,10 @@ print(rfm_bl)
 ```{r}
 # Evaluate prediction accuracy
 death_pred = predict(rfm_bl, test_data_bl)
-test_data_bl$death_pred = death_pred
+#test_data_bl$death_pred = death_pred
 
 # Build Confusion Matrix 
-cfm = table(test_data_bl$in_hosp_death, test_data_bl$death_pred, exclude = NULL)
+cfm = table(test_data_bl$in_hosp_death, death_pred, exclude = NULL)
 cfm
 # For patients who didn't die, 35014 of 41175 were correctly predicted to have not died. For those who did die, 621 of 41175 were correctly predicted to have died. 
 
@@ -139,8 +139,6 @@ set.seed(11022009)
 # output_vector_test = test_data_bl[, "in_hosp_death"] == "Death"
 
 
-
-
 # independent variables for train
 X_train = data.matrix(train_data_bl[, -5])
 
@@ -168,10 +166,11 @@ xgb_bl = xgboost(data = xgboost_train, # independent variables training data
                  objective = "binary:logistic", # classification XGBoost
                  eval_metric = "error") 
 
-
-summary(xgb_bl)
+# Summary of XGBoost model
+summary(xgb_bl) 
 
 ```
+
 
 #### XGBoost Model Predictions
 ```{r}
@@ -192,15 +191,14 @@ print(conf_mat)
 ```
 
 ```{r}
+# Compute model performance metrics for XGBoost 
 mean((y_test - pred_y)^2) # MSE
 caret::MAE(y_test, pred_y) # MAE
 caret::RMSE(y_test, pred_y) # RMSE
 ```
 
 ```{r}
-importance_xgb = xgb.importance(feature_names = sparse_matrix_test@Dimnames[[2]], model = xgb_bl)
-
-head(importance_xgb)
+# importance_xgb = xgb.importance(feature_names = sparse_matrix_test@Dimnames[[2]], model = xgb_bl)
 
 importance_xgb = xgb.importance(colnames(xgboost_train), model = xgb_bl)
 xgb_imp_plot = xgb.ggplot.importance(importance_xgb, top_n = 4) 
@@ -215,6 +213,7 @@ xgb_imp_plot + theme(legend.position = "none",
 ```
 Based on the plot above, Age is the largest contributor to the performance of the XGBoost model with height second largest, and ICU type third largest. 
 ```{r}
+# Cross-validation of XGBoost model 
 xgb_cv = xgb.cv(data = xgboost_train, 
                  nfold = 5,
                  eta = 1, 
@@ -231,7 +230,6 @@ print(xgb_cv) # print cross-validation results as data frame
 
 ```{r}
 plot_correlation(train_data_bl)
-
 
 ```
 
