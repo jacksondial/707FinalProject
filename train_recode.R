@@ -53,3 +53,4 @@ transposed_train <- train_agg %>%
 sum(is.na(transposed_train$In.hospital_death)) #finally has 0 looks like we are good
 
 write.csv(transposed_train, "train_recode.csv")
+
