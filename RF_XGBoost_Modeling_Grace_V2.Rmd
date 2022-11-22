@@ -1,5 +1,5 @@
 ---
-title: "Random Forest Modeling"
+title: "Random Forest and XGBoost Modeling"
 author: "Grace Kovic"
 date: '2022-11-19'
 output: html_document
