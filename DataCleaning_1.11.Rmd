@@ -52,7 +52,7 @@ average_missing_per_subjid <- filled %>%
 
 ```
 
-#### End of Jackson's Code 
+#### End of Jackson's Code
 
 #### Assessing First 11 columns (subjid to creatinine, inclusive)
 
@@ -62,23 +62,26 @@ grace_df <- filled[, 1:11]
 
 ```
 
-#### Plot of Missingness in Grace's variables 
+#### Plot of Missingness in Grace's variables
 
 ```{r}
 plot_missing(grace_df)
 ```
 
-#### Histogram of variables 
+#### Histogram of variables
 
 ```{r}
 # Histogram of all variables 
 plot_histogram(grace_df)
 ```
 
-#### Age 
+#### Age
 
 ```{r}
 summary(grace_df$Age) # values for age are normal (15 to 90)
+
+data %>% filter(Age < 18) # There are 6 individuals with an age below 18
+
 ```
 
 #### ALP
@@ -146,12 +149,11 @@ summary(grace_df$BUN) # Blood urea nitrogen - indication of kidney health
 # Normal healthy range: 6 - 20 mg/dL
 # High levels of BUN (> 28 mg/dL) indicate that your kidneys aren't working well 
 
-grace_df %>% filter(BUN == 0)
-
 boxplot(grace_df$BUN) # Most outliers are above 50
 
 # There are some values below 6 including 0 which may indicate very poor kidney health 
 
+data %>% filter(BUN == 0)
 ```
 
 #### Bilirubiin
@@ -199,7 +201,7 @@ boxplot(grace_df$Cholesterol) # The outliers of cholesterol are above 250
 
 ```
 
-#### Creatinine 
+#### Creatinine
 
 ```{r}
 summary(grace_df$Creatinine) # Serum Creatinine - important indicator of kidney health 
