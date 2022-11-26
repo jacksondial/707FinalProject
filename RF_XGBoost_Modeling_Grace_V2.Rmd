@@ -1,7 +1,7 @@
 ---
 title: "Random Forest and XGBoost Modeling"
 author: "Grace Kovic"
-date: '2022-11-19'
+date: '2022-11-26'
 output: html_document
 ---
 
@@ -9,13 +9,14 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## Change Log 
+## Change Log
 
 ```{r}
 ###########################################################################
 # Change Log: 
 # Version 1: Performed Random Forest and XGBoost Modeling for Age, Gender, Height and ICU Type 
 # Version 2: Removed commented out code that's no longer needed and complete interpretation of models 
+
 ```
 
 ```{r message=FALSE, warning=FALSE}
@@ -52,43 +53,61 @@ test_data = read.csv("/Users/KovicFamily/Documents/Duke MB/Courses/2022-2023 Cou
 # summary(test_data)
 # summary(train_data)
 
-
 # Make in_hosp_death and Gender factors to fit a classification RF model
 train_data$in_hosp_death = as.factor(train_data$in_hosp_death)
 train_data$Gender = as.factor(train_data$Gender)
+# created a height variable in meters 
+train_data$Height_m = (train_data$Height)/100
 
 test_data$in_hosp_death = as.factor(test_data$in_hosp_death)
 test_data$Gender = as.factor(test_data$Gender)
+# created a height variable in meters
+test_data$Height_m = (test_data$Height)/100
 ```
 
 ```{r}
 # (1) Remove subjid column in train_data and test_data for modeling purposes  
-# (2) Subset train_data and test_data to just contain baseline characteristics collected at time of ICU admission (Age, Gender, Weight, Height, ICU Type, in_hosp_death) plus in_hosp_death
+
+# (2) Subset train_data and test_data to just contain baseline characteristics collected at time of ICU admission (Age, Gender, Weight, Height_m, ICU Type, in_hosp_death) plus in_hosp_death
+
+# (3) Created a BMI variable usiing Weight and Height
 
 train_data_bl = train_data %>% 
   dplyr::select(-c("subjid")) %>% # remove subjid for modeling purposes 
-  dplyr::select(Age, Gender, Height, ICUType, in_hosp_death)
+  dplyr::select(Age, Gender, Height_m, Weight, ICUType, in_hosp_death) %>% 
+  mutate(BMI = Weight/(Height_m^2)) %>% 
+  subset(select = -c(Weight, Height_m)) # Remove Weight and Height from train data
 
 test_data_bl = test_data %>% 
   dplyr::select(-c("subjid")) %>% 
-  dplyr::select(Age, Gender, Height, ICUType, in_hosp_death)
+  dplyr::select(Age, Gender, Height_m, Weight, ICUType, in_hosp_death) %>% 
+  mutate(BMI = Weight/(Height_m^2)) %>% 
+  subset(select = -c(Weight, Height_m)) # Remove Weight and Height from test data
+
+```
+
+```{r}
+train_data_bl %>% 
+  ggplot()
 ```
 
 ### RF Modeling of Baseline Features
 
 ```{r}
-# Classification Random Forest model using baseline features
+# Classification Random Forest model using baseline features 
+# BMI was used in place of Height and Weight 
 set.seed(11022009)
 rfm_bl = randomForest(in_hosp_death ~ ., data = train_data_bl, ntree = 500) 
 print(rfm_bl)
 
 ```
 
-The Random Forest model correctly predicts those who did not die at an accuracy of 0.38% and correctly predicts those who did die at an accuracy of 0.45.
+The RF model above contains Age, Gender, BMI, and ICUType as the features. The model correctly predicted in-hospital death with an error rate of 7.97% and correctly predicted no in-hospital death at an error rate of 0.047%.
 
 #### Classification Accuracy of RF Model
 
 ```{r}
+set.seed(11022009)
 # Evaluate prediction accuracy
 rfm_pred = predict(rfm_bl, test_data_bl)
 
@@ -103,20 +122,23 @@ classification_accuracy = sum(diag(cfm)/sum(cfm))
 
 ```
 
-The classification accuracy of the Random Forest model for in-hospital death is approximately 86.5% meaning that the model correctly classifies or predicts individuals as either a survivor or as dead.
+The classification accuracy of the Random Forest model for in-hospital death is approximately 86.1% meaning that the model correctly classifies or predicts individuals as either a survivor or as dead 86.1% of the time
 
-#### AUC Curve 
+#### ROC Curve
 
 ```{r}
-# Compute AUC of RF Model
-roc.test = roc(test_data_bl$in_hosp_death, as.numeric(rfm_pred))
-rfm_auc = auc(roc.test) 
+set.seed(11022009)
+# Compute AUROC of RF Model
+roc_obj = roc(test_data_bl$in_hosp_death, as.numeric(rfm_pred))
+# roc_obj # outputs AUROC value
+auroc = round(auc(roc_obj), 4) # AUROC
 
-# Plot of Specificity vs. Sensitivity 
-plot(roc.test)
+
+# Plot of ROC Curve 
+ggroc(roc_obj, color = "steelblue", size = 1.7) + 
+  ggtitle(paste0('ROC Curve for Random Forest at Baseline ', '(AUC = ', auroc, ')')) + 
+  theme_bw()
 ```
-
-The AUC of the Random Forest model is 0.546.
 
 #### RF Variable Importance Plot
 
@@ -153,16 +175,16 @@ Based on the importance plot above, Age has the largest decrease in the Gini ind
 
 ```{r}
 # Independent variables for train
-X_train = data.matrix(train_data_bl[, -5])
+X_train = data.matrix(train_data_bl[, -4])
 
 # Dependent variable for train
-y_train = as.numeric(as.character(train_data_bl[, 5])) # Must make the y_train a character and then numeric
+y_train = as.numeric(as.character(train_data_bl[, 4])) # Must make the y_train a character and then numeric
 
 # Independent variables for test
-X_test = data.matrix(test_data_bl[, -5])
+X_test = data.matrix(test_data_bl[, -4])
 
 # Dependent variable for test
-y_test = as.numeric(as.character(test_data_bl[, 5])) # Must make y_test a character and then numeric
+y_test = as.numeric(as.character(test_data_bl[, 4])) # Must make y_test a character and then numeric
 
 # Convert the train and test data into xgboost matrix type 
 xgboost_train = xgb.DMatrix(data = X_train, label = y_train)
@@ -192,32 +214,34 @@ Based on the AUC values for each of the 10 rounds that the XGBoost model was ran
 
 ```{r}
 # Use model to get predictions on test data in terms of probabilities 
-pred_test = predict(xgb_bl, xgboost_test)
+xgb_pred_test = predict(xgb_bl, xgboost_test)
 
 # Convert probability predictions to 0's and 1's
-pred_y = as.numeric(pred_test > 0.5) # variable -- Any probability > 0.5 is classified as 1 and 0, otherwise 
+xgb_pred = as.numeric(pred_test > 0.5) # variable -- Any probability > 0.5 is classified as 1 and 0, otherwise 
 
 # Confusion matrix -- need to convert y_test and pred_y to factors first
-conf_mat = confusionMatrix(factor(y_test), factor(pred_y))
+conf_mat = confusionMatrix(factor(y_test), factor(xgb_pred))
 print(conf_mat)
 
 ```
 
-#### AUC Curve 
+#### ROC Curve
 
 ```{r}
+set.seed(11022009)
 # Calculate AUC and plot AUC curve for XGBoost 
-roc.test = roc(test_data_bl$in_hosp_death, as.numeric(pred_y))
-rfm_auc = auc(roc.test) 
+roc_obj_xgb = roc(test_data_bl$in_hosp_death, as.numeric(pred_y))
+auroc_xgb = round(auc(roc_obj_xgb), 4) # AUROC
 
 # Plot of Specificity vs. Sensitivity 
-plot(roc.test, colorize = TRUE, title = "AUC Curve of XGBoost Model")
-
+ggroc(roc_obj_xgb, color = "steelblue", size = 1.7) + 
+  ggtitle(paste0('ROC Curve for XGBoost Model at Baseline ', '(AUC = ', auroc_xgb, ')')) + 
+  theme_bw()
 ```
 
-The AUC of the XGBoost model is 0.5089 which is lower than the AUC of the RF model. Based on the AUC metric, Random Forest seems to perform better than XGBoost in predicting in-hospital death based on baseline characteristics Age, Gender, Height, and ICU Type.
+The AUROC of the XGBoost model is 0.5083 which is lower than the AUROC of the RF model. Based on the AUROC metric, Random Forest seems to perform better than XGBoost in predicting in-hospital death based on baseline characteristics Age, Gender, BMI, and ICU Type.
 
-#### XGBoost Variable Importance 
+#### XGBoost Variable Importance
 
 ```{r}
 # Variable Importance Plot for XGBoost
@@ -242,7 +266,7 @@ print(importance_xgb)
 
 The importance matrix of XGBoost above restates the results shown in the plot above which is that Age is the most important in predicting in-hospital death and Gender the least important.
 
-#### Cross-Validation Results of XGBoost 
+#### Cross-Validation Results of XGBoost
 
 ```{r}
 # Cross-Validation of XGBoost model 
