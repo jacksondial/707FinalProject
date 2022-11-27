@@ -23,8 +23,6 @@ knitr::opts_chunk$set(echo = TRUE)
 library(randomForest)
 library(ROCR)
 library(pROC)
-library(ggRandomForests)
-library(LongituRF)
 library(xgboost)
 library(caret)
 library(tidyverse)
@@ -37,11 +35,11 @@ library(dplyr)
 
 ```{r}
 # Read in data 
-train_data = read.csv("/Users/KovicFamily/Documents/Duke MB/Courses/2022-2023 Courses/Fall 2022/BIOSTAT 707 - Stat Machine Learning/Final Project/707FinalProject/train.csv") %>% 
+train_data = read.csv("train.csv") %>% 
   select(-1) %>% # Remove the extra index column 
   rename(Height = height_cleaned) # rename height variable 
 
-test_data = read.csv("/Users/KovicFamily/Documents/Duke MB/Courses/2022-2023 Courses/Fall 2022/BIOSTAT 707 - Stat Machine Learning/Final Project/707FinalProject/test.csv") %>% 
+test_data = read.csv("test.csv") %>% 
   select(-1) %>% # Remove the extra index column 
   rename(Height = height_cleaned) # rename height variable 
 ```
@@ -56,9 +54,13 @@ test_data = read.csv("/Users/KovicFamily/Documents/Duke MB/Courses/2022-2023 Cou
 # Make in_hosp_death and Gender factors to fit a classification RF model
 train_data$in_hosp_death = as.factor(train_data$in_hosp_death)
 train_data$Gender = as.factor(train_data$Gender)
+train_data$ICUType = as.factor(train_data$ICUType)
+train_data$Height_m = (train_data$Height)/100
 
 test_data$in_hosp_death = as.factor(test_data$in_hosp_death)
 test_data$Gender = as.factor(test_data$Gender)
+test_data$ICUType = as.factor(test_data$ICUType)
+test_data$Height_m = (test_data$Height)/100
 ```
 
 ```{r}
@@ -66,12 +68,22 @@ test_data$Gender = as.factor(test_data$Gender)
 # (2) Subset train_data and test_data to just contain baseline characteristics collected at time of ICU admission (Age, Gender, Weight, Height, ICU Type, in_hosp_death) plus in_hosp_death
 
 train_data_bl = train_data %>% 
-  dplyr::select(-c("subjid")) %>% # remove subjid for modeling purposes 
-  dplyr::select(Age, Gender, Height, ICUType, in_hosp_death)
+  group_by(subjid) %>% 
+  slice(1) %>% 
+  ungroup() %>% 
+  dplyr::select(-c(subjid)) %>% # remove subjid for modeling purposes 
+  dplyr::select(Age, Gender, Height, ICUType, in_hosp_death, Weight, Height_m) %>% 
+  mutate(BMI = Weight/(Height_m^2)) %>% 
+  subset(select = -c(Weight, Height_m)) # Remove Weight and Height from test data
 
 test_data_bl = test_data %>% 
-  dplyr::select(-c("subjid")) %>% 
-  dplyr::select(Age, Gender, Height, ICUType, in_hosp_death)
+  group_by(subjid) %>% 
+  slice(1) %>% 
+  ungroup() %>% 
+  dplyr::select(-c(subjid)) %>% 
+  dplyr::select(Age, Gender, Height, ICUType, in_hosp_death, Weight, Height_m) %>% 
+  mutate(BMI = Weight/(Height_m^2)) %>% 
+  subset(select = -c(Weight, Height_m)) # Remove Weight and Height from test data
 ```
 
 ### RF Modeling of Baseline Features
@@ -79,9 +91,8 @@ test_data_bl = test_data %>%
 ```{r}
 # Classification Random Forest model using baseline features
 set.seed(11022009)
-rfm_bl = randomForest(in_hosp_death ~ ., data = train_data_bl, ntree = 500) 
+rfm_bl = randomForest(in_hosp_death ~ ., data = train_data_bl) 
 print(rfm_bl)
-
 ```
 
 The Random Forest model correctly predicts those who did not die at an accuracy of 0.38% and correctly predicts those who did die at an accuracy of 0.45.
@@ -89,11 +100,16 @@ The Random Forest model correctly predicts those who did not die at an accuracy 
 #### Classification Accuracy of RF Model
 
 ```{r}
+# This is dependent upon the threshold we set
+
+
 # Evaluate prediction accuracy
-rfm_pred = predict(rfm_bl, test_data_bl)
+rfm_pred = predict(rfm_bl, test_data_bl[-5], type = "prob")
+
+rfm_pred_prob = rfm_pred[, 2]
 
 # Build Confusion Matrix 
-cfm = table(test_data_bl$in_hosp_death, rfm_pred, exclude = NULL)
+cfm = table(test_data_bl$in_hosp_death, ifelse(rfm_pred_prob > 0.13, 1, 0), exclude = NULL)
 cfm
 # For patients who didn't die, 35014 of 41175 were correctly predicted to have not died. For those who did die, 621 of 41175 were correctly predicted to have died. 
 
@@ -109,7 +125,8 @@ The classification accuracy of the Random Forest model for in-hospital death is 
 
 ```{r}
 # Compute AUC of RF Model
-roc.test = roc(test_data_bl$in_hosp_death, as.numeric(rfm_pred))
+rfm_results = as.numeric(ifelse(rfm_pred == 1, 1, 0))
+roc.test = roc(test_data_bl$in_hosp_death, rfm_pred_prob)
 rfm_auc = auc(roc.test) 
 
 # Plot of Specificity vs. Sensitivity 
