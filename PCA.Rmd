@@ -20,7 +20,10 @@ test <- read.csv("test_recode.csv")
 data <- rbind(train, test)
 ```
 
+```{r}
 
+data <- data %>%  select(contains(variables_kept))
+```
 
 
 1. Explore dataset
@@ -79,7 +82,7 @@ clean_data <- data %>%
 
 
 # Remove row with NA outcome
-clean_data = clean_data[!is.na(clean_data$In.hospital_death),]
+# clean_data = clean_data[!is.na(clean_data$In.hospital_death),]
 ```
 
 Show that no NAs remain
@@ -117,7 +120,7 @@ There are 1815 observations and 154 continuous variables.
 Calculate PCs
 ```{r message = FALSE}
 cont_data <- cont_data %>%  mutate_all(~replace(., is.na(.), -1))
-pr.out=prcomp(cont_data, scale=TRUE)
+pr.out=prcomp(cont_data[2:117], scale=TRUE)
 ```
 
 prcomp() function centers the variables to have mean zero. By using the option scale=TRUE, we scale the variables to have standard deviation one. 
@@ -188,4 +191,75 @@ plot(pve, xlab="Principal Component", ylab="Proportion of Variance Explained ", 
 plot(cumsum(pve), xlab="Principal Component ", ylab=" Cumulative Proportion of Variance Explained ", ylim=c(0,1), type='b')
 ```
 
+
+## -------------------------------------------
+
+
+
+```{r}
+mean_train_data <- read.csv("mean_train_frame.csv")
+pr_comp_mean <- prcomp(mean_train_data[4:36])
+summary(pr_comp_mean)
+```
+
+## Variables Contributing Most Variance
+### Based on sum of PC1 & PC2
+
+```{r}
+most_contribution <- data.frame(abs(pr_comp_mean$rotation[,1:2])) %>% 
+  mutate(var = rownames(.), Total_PC = (PC1 +PC2)) %>% 
+  arrange(desc(Total_PC))
+head(most_contribution)
+```
+
+
+```{r}
+fviz_pca_biplot(pr_comp_mean, repel = TRUE, label = "var", select.var = list(contrib = 4), arrowsize = 0.75, alpha.ind = 0.1, col.var = "blue",title = "PCA Biplot with top 4 contributing variables")
+```
+
+
+```{r}
+screeplot(pr_comp_mean,
+          main = "Principal Component Variances for Averaged Features",
+          type = "lines")
+```
+
+
+
+```{r}
+var_explained = pr_comp_mean$sdev^2 / sum(pr_comp_mean$sdev^2)
+
+#create scree plot
+
+
+prop_plot <- qplot(c(1:33),var_explained) +
+  geom_line() +
+  xlab("Principal Component") +
+  ylab("Proportion Variance Explained") +
+  ggtitle("Scree Plot") +
+  ylim(0, 1) +
+  theme_bw() + 
+  scale_x_continuous(breaks = seq(1,33, by = 1))
+
+cumulative_prop <- summary(pr_comp_mean)$importance[c(seq(3,90, by = 3))]
+
+cum_plot <- qplot(y = cumulative_prop) +
+  geom_line() +
+  xlab("Principal Component") +
+  ylab("Cumulative Prop. Variance Explained") +
+  ggtitle("Scree Plot") +
+  ylim(0, 1) +
+  theme_bw()
+
+cum_plot <- cum_plot + 
+  geom_hline(yintercept = 0.88, color = "red", linetype = "dashed") +
+   geom_hline(yintercept = 0.95, color = "blue", linetype = "dashed") +
+  scale_x_continuous(breaks = seq(1,30, by = 1))
+```
+
+
+```{r fig.width=7, fig.height=2}
+library(patchwork)
+prop_plot + cum_plot
+```
 

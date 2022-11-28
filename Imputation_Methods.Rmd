@@ -383,8 +383,6 @@ subset_train %>% group_by(Interval) %>% count()
 ```
 
 
-
-
 ### Write .csv Files of the imputed data
 
 ```{r}
