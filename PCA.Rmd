@@ -1,0 +1,191 @@
+---
+title: "PCA"
+author: "Hannah Damico"
+date: "2022-11-28"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(factoextra)
+library(data.table)
+library(tidyverse)
+```
+
+
+```{r}
+train <- read.csv("train_recode.csv")
+test <- read.csv("test_recode.csv")
+
+data <- rbind(train, test)
+```
+
+
+
+
+1. Explore dataset
+
+Show first 5 rows of data
+```{r}
+head(data,5)
+```
+
+Get variable names of dataset
+```{r}
+# names(data)
+```
+
+Find columns with missing data
+```{r}
+# Get number of NAs per variable
+na_table  = sapply(data, function(y) sum(length(which(is.na(y)))))
+
+# Filter table to only include variables with NA
+na_table = na_table[na_table > 0]
+# na_table
+
+# Get columns with missing data
+missing_cols = names(na_table)
+# missing_cols
+
+# Remove Extra Index Variable X
+missing_cols = missing_cols[-1]
+
+# Remove outcome from missing cols
+missing_cols = missing_cols[-length(missing_cols)]
+
+# missing_cols
+```
+
+Mean imputation of missing values
+```{r warning = FALSE}
+# Copy dataset
+clean_data = data
+
+# Iterate over missing columns
+# for(missing_col in missing_cols) {
+#   # Mean imputation for survival group
+#   clean_data[[missing_col]][is.na(data[[missing_col]]) & data$outcome == 0] =
+#     mean(data[[missing_col]][data$outcome == 0], na.rm = TRUE)
+#   
+#   # Mean imputation for non-survival group
+#   clean_data[[missing_col]][is.na(data[[missing_col]]) & data$outcome == 1] =
+#     mean(data[[missing_col]][data$outcome == 1], na.rm = TRUE)
+# }
+
+clean_data <- data %>% 
+  group_by(subjid) %>% 
+  tidyr::fill(missing_cols, .direction = c("updown"))
+
+
+# Remove row with NA outcome
+clean_data = clean_data[!is.na(clean_data$In.hospital_death),]
+```
+
+Show that no NAs remain
+```{r}
+# Get number of NAs per variable
+na_table_new  = sapply(clean_data, function(y) sum(length(which(is.na(y)))))
+
+na_table_new
+```
+
+Extract only continuous variables
+```{r}
+# De-select non-continuous variables
+cont_data = clean_data %>% 
+  select(-contains(c("MechVent", "Gender", "ICUType")), - X)
+```
+
+Show first 5 rows of continuous data
+```{r}
+head(cont_data)
+```
+Show summary of data
+```{r}
+summary(cont_data)
+```
+Get dimensions of data
+```{r}
+nrow(cont_data)
+ncol(cont_data)
+```
+There are 1815 observations and 154 continuous variables.
+
+2. It is important to standardize the variables to have mean zero and standard deviation one before performing PCA.
+
+Calculate PCs
+```{r message = FALSE}
+cont_data <- cont_data %>%  mutate_all(~replace(., is.na(.), -1))
+pr.out=prcomp(cont_data, scale=TRUE)
+```
+
+prcomp() function centers the variables to have mean zero. By using the option scale=TRUE, we scale the variables to have standard deviation one. 
+
+Print output categories of pc object
+```{r}
+names(pr.out)
+```
+Print variable means
+```{r}
+pr.out$center
+
+```
+
+```{r}
+pr.out$scale^2
+```
+
+3. The rotation matrix provides the principal component loadings; each col- umn of pr.out$rotation contains the corresponding principal component loading vector.
+
+I only outputted the first 5 variables for the first 2 PCs because there are a lot of PCs.
+
+```{r}
+pr.out$rotation[,1:2]
+```
+
+```{r}
+ncol(pr.out$rotation)
+```
+There are 38 principal components because the maximum number of principal component loadings is the minimum between (sample size - 1) and number of predictors. We have 38 predictors and 1176 individuals in our sample, so the maximum number of principal components is 38.
+
+4. The 1176 × 38 matrix x has as its columns the principal component score vectors. That is, the kth column is the kth principal component score vector.
+
+```{r}
+dim(pr.out$x)
+```
+
+```{r}
+pr.out$x[1:20,1:2]
+```
+I only printed out the first 20 observations for the first two components for simplicity sake.
+
+4. Plot the first 2 principal components.
+
+```{r, fig.width = 5, fig.height = 5}
+fviz_pca_biplot(pr.out, repel = TRUE, label = "var", select.var = list(contrib = 4), arrowsize = 0.75, alpha.ind = 0.1, col.var = "blue",title = "PCA Biplot with top 4 contributing variables")
+```
+
+5. The prcomp() function also outputs the standard deviation of each principal component. For instance, on the data set, we can access these standard deviations as follows:
+
+```{r}
+pr.var=pr.out$sdev^2
+pr.var
+```
+
+Proportion of variance explained.
+
+```{r}
+pve=pr.var/sum(pr.var)
+```
+
+
+```{r}
+plot(pve, xlab="Principal Component", ylab="Proportion of Variance Explained ", ylim=c(0,1),type='b')
+```
+
+```{r}
+plot(cumsum(pve), xlab="Principal Component ", ylab=" Cumulative Proportion of Variance Explained ", ylim=c(0,1), type='b')
+```
+
+

@@ -1,0 +1,12 @@
+---
+title: "GLM Model After PCA"
+author: "Hannah Damico"
+date: "2022-11-28"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+subjid, ALP 1-4, ALT 1-4, AST 1-4, Age 1-4, Albumin 1-4, BUN 1-4

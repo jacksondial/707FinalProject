@@ -376,6 +376,12 @@ mean_test_frame <- subset_test %>%
   summarise_all("mean")
 ```
 
+```{r}
+mean_train_frame %>% group_by(Interval) %>% count()
+
+subset_train %>% group_by(Interval) %>% count()
+```
+
 
 
 
@@ -390,7 +396,7 @@ mean_test_frame <- subset_test %>%
 ### Write .csv Files of the imputed mean data
 This dataset contains one value per subject per interval.
 ```{r}
-write.csv(mean_train_frame, "mean_train_frame.csv")
-write.csv(mean_test_frame, "mean_test_frame.csv")
+# write.csv(mean_train_frame, "mean_train_frame.csv")
+# write.csv(mean_test_frame, "mean_test_frame.csv")
 ```
 
