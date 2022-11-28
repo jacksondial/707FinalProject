@@ -49,12 +49,12 @@ test_data = read.csv("/Users/KovicFamily/Documents/Duke MB/Courses/2022-2023 Cou
   select(-1) %>% # Remove the extra index column 
   rename(Height = height_cleaned) # rename height variable 
 
-# Imputed training and testing data with interval variable split at every 12 hours of the total 48 hour period that the data was collected  
-imputed_train = read.csv("/Users/KovicFamily/Documents/Duke MB/Courses/2022-2023 Courses/Fall 2022/BIOSTAT 707 - Stat Machine Learning/Final Project/imputed_train.csv") %>% 
+# Imputed training and testing data with interval variable split at every 12 hours of the total 48 hour period and the mean value of the feature calculated for each individual per interval  
+imputed_train = read.csv("/Users/KovicFamily/Documents/Duke MB/Courses/2022-2023 Courses/Fall 2022/BIOSTAT 707 - Stat Machine Learning/Final Project/mean_train_frame.csv") %>% 
   select(-1) %>% # Remove the extra index column 
   rename(Height = height_cleaned) # rename height variable 
 
-imputed_test = read.csv("/Users/KovicFamily/Documents/Duke MB/Courses/2022-2023 Courses/Fall 2022/BIOSTAT 707 - Stat Machine Learning/Final Project/imputed_test.csv") %>% 
+imputed_test = read.csv("/Users/KovicFamily/Documents/Duke MB/Courses/2022-2023 Courses/Fall 2022/BIOSTAT 707 - Stat Machine Learning/Final Project/mean_test_frame.csv") %>% 
   select(-1) %>% # Remove the extra index column 
   rename(Height = height_cleaned) # rename height variable 
 ```
@@ -157,19 +157,19 @@ imputed_test_clean = imputed_test %>%
 # Interval 1 training data 
 imputed_train_clean_interval1 = imputed_train_clean %>%
   filter(Interval == 1) %>%
-  subset(select = -c(Interval, Time, Hour)) # Remove extra variables 
+  subset(select = -c(Interval)) # Remove extra variables 
 
 # Interval 1 testing data 
 imputed_test_clean_interval1 = imputed_test_clean %>%
   filter(Interval == 1) %>%
-  subset(select = -c(Interval, Time, Hour)) # Remove extra variables 
+  subset(select = -c(Interval)) # Remove extra variables 
 
 ```
 
 ```{r}
-# Random Forest model for Interval 1 where all rows containing at least one missing value are omitted 
+# Random Forest model for Interval 1 
 set.seed(11022009)
-rfm_interval1 = randomForest(in_hosp_death ~ ., data = na.omit(imputed_train_clean_interval1), ntree = 500) 
+rfm_interval1 = randomForest(in_hosp_death ~ ., data = imputed_train_clean_interval1, ntree = 500) 
 print(rfm_interval1)
 
 # Plot the test MSE by the number of trees used 
@@ -184,13 +184,17 @@ Based on the RF plot above, the test MSE stops decreasing around 50 trees
 
 ```{r}
 # This is dependent upon the threshold we set 
+
+
 set.seed(11022009)
 
 # Evaluate prediction accuracy
-rfm_pred = predict(rfm_interval1, imputed_test_clean_interval1[-32], type = "prob")
+rfm_interval1_pred = predict(rfm_interval1, imputed_test_clean_interval1[-32], type = "prob")
+
+rfm_interval1_pred_prob = rfm_interval1_pred[, 2]
 
 # Build Confusion Matrix 
-cfm = table(imputed_test_clean_interval1$in_hosp_death, rfm_pred, exclude = NULL)
+cfm = table(imputed_test_clean_interval1$in_hosp_death, ifelse(rfm_interval1_pred_prob > 0.13, 1, 0), exclude = NULL)
 cfm
 
 # Classification accuracy 
@@ -203,9 +207,13 @@ classification_accuracy = sum(diag(cfm)/sum(cfm))
 ```{r}
 set.seed(11022009)
 # Compute AUROC of RF Model
-roc_obj = roc(imputed_test_clean_interval1$in_hosp_death, as.numeric(rfm_pred))
-# roc_obj # outputs AUROC value
-auroc = round(auc(roc_obj), 4) # AUROC
+rfm_interval1_results = as.numeric(ifelse(rfm_interval1_pred == 1, 1, 0))
+rfm_interval1_roc.test = roc(imputed_test_clean_interval1$in_hosp_death, rfm_interval1_pred_prob)
+
+rfm_interval1_auc = auc(rfm_interval1_roc.test)
+
+# Plot ROC curve 
+plot(rfm_interval1_roc.test)
 
 
 # Plot of ROC Curve 
