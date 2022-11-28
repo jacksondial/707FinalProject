@@ -148,7 +148,6 @@ imputed_test_clean = imputed_test %>%
   dplyr::select(-c(subjid)) %>% 
   mutate(BMI = Weight/(Height_m^2)) %>% 
   subset(select = -c(Weight, Height_m, Height)) # Remove Weight and Height vars from train data
-
 ```
 
 ### RF Modeling Per Time Interval
@@ -200,7 +199,7 @@ classification_accuracy = sum(diag(cfm)/sum(cfm))
 ```
 
 
-#### ROC Curve 
+### ROC Curve 
 ```{r}
 set.seed(11022009)
 # Compute AUROC of RF Model
@@ -243,7 +242,7 @@ p + theme(axis.text.x = element_text(size=12),
   theme_bw()
 
 ```
-The plot above indicates that Age and BUN are the largest contributors to the prediction of in-hospital death when analyziing the first 12 hours of ICU Hospitalization. 
+The plot above indicates that Age and BUN are the largest contributors to the prediction of in-hospital death when analyzing the first 12 hours of ICU Hospitalization. 
 
 
 ### RF Modeling of Baseline Features
@@ -278,7 +277,7 @@ print(rfm_bl_test)
 
 set.seed(11022009)
 # Matrix of probabilities of death and no death  
-rfm_pred = predict(rfm_bl, test_data_bl[-5], type = "prob") 
+rfm_pred = predict(rfm_bl, test_data_bl[-4], type = "prob") 
 
 rfm_pred_prob = rfm_pred[, 2] # Predicted probabilities of dying 
 
@@ -417,13 +416,13 @@ Based on the AUC values for each of the 10 rounds that the XGBoost model was ran
 X_train = data.matrix(train_data_bl[, -4])
 
 # Dependent variable for train
-y_train = data.matrix(train_data_bl[, 4]) 
+y_train = data.matrix(ifelse(train_data_bl[, 4] == 1, 1, 0))
 
 # Independent variables for test
 X_test = data.matrix(test_data_bl[, -4])
 
 # Dependent variable for test
-y_test = data.matrix(test_data_bl[, 4]) 
+y_test = data.matrix(ifelse(test_data_bl[, 4] == 1, 1, 0))
 
 # Convert the train and test data into xgboost matrix type 
 xgboost_train = xgb.DMatrix(data = X_train, label = y_train)
@@ -431,13 +430,13 @@ xgboost_test = xgb.DMatrix(data = X_test, label = y_test)
 
 
 set.seed(11022009)
-# XGBoost Model # -- ISSUE WITH XGBOOST 
+# XGBoost Model #
 # Train an xgboost model using our training data - outputs training error
 xgb_bl = xgboost(data = xgboost_train, # independent variables training data
                  eta = 0.3, 
                  max.depth = 6,
                  nround = 100, 
-                 #nthreads = 2, 
+                 print_every_n = 10, 
                  objective = "binary:logistic", 
                  eval_metric = "auc") # AUC 
 
