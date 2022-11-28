@@ -174,17 +174,20 @@ print(rfm_interval1)
 
 # Plot the test MSE by the number of trees used 
 plot(rfm_interval1) 
+
+# Based on the tuning results of RF model below, the optimal number of predictors per tree is 5 or 6
+
+# rfm_interval1_tune = tuneRF(imputed_train_clean_interval1, imputed_train_clean_interval1$in_hosp_death, stepFactor = 1.2, improve = 0.01, trace = T, plot = T)
+# 
+# rfm_interval1_train = train(form = in_hosp_death ~ ., data = imputed_train_clean_interval1, method = "rf")
+
 ```
-
-
-Based on the RF plot above, the test MSE stops decreasing around 50 trees 
 
 
 #### Classification Accuracy of RF Model
 
 ```{r}
 # This is dependent upon the threshold we set 
-
 
 set.seed(11022009)
 
@@ -206,21 +209,32 @@ classification_accuracy = sum(diag(cfm)/sum(cfm))
 ### ROC Curve 
 ```{r}
 set.seed(11022009)
+
 # Compute AUROC of RF Model
 rfm_interval1_results = as.numeric(ifelse(rfm_interval1_pred == 1, 1, 0))
 rfm_interval1_roc.test = roc(imputed_test_clean_interval1$in_hosp_death, rfm_interval1_pred_prob)
 
-rfm_interval1_auc = auc(rfm_interval1_roc.test)
+rfm_interval1_auc = round(auc(rfm_interval1_roc.test), 4)
 
 # Plot ROC curve 
 plot(rfm_interval1_roc.test)
 
 
 # Plot of ROC Curve 
-ggroc(roc_obj, color = "steelblue", size = 1.7) + 
-  ggtitle(paste0('ROC Curve for Random Forest in Interval 1 ', '(AUC = ', auroc, ')')) + 
+ggroc(rfm_interval1_roc.test, color = "steelblue", size = 1.7) + 
+  ggtitle(paste0('ROC Curve for Random Forest in Interval 1 ', '(AUC = ', rfm_interval1_auc, ')')) + 
   theme_bw()
 ```
+
+### PR Curve 
+```{r}
+pred = prediction(rfm_interval1_pred_prob, imputed_test_clean_interval1$in_hosp_death)
+
+auc_PR = performance(pred, measure = "aucpr")
+auc_PR = auc_PR@y.values[[1]]
+
+```
+
 
 #### Variable Importance Plot 
 ```{r}
@@ -263,6 +277,8 @@ rfm_bl = randomForest(in_hosp_death ~ ., data = train_data_bl)
 print(rfm_bl)
 
 plot(rfm_bl)
+
+# Since our dataset contains a large number of individuals, the default number of parameters of 500 was used for both the random forest model on the baseline measurements and on the first 12 hours of the study period
 ```
  
 
@@ -281,7 +297,6 @@ print(rfm_bl_test)
 
 ```{r}
 # This is dependent upon the threshold we set 
-
 
 set.seed(11022009)
 # Matrix of probabilities of death and no death  
@@ -314,28 +329,34 @@ rfm_results = as.numeric(ifelse(rfm_pred == 1, 1, 0))
 
 roc.test = roc(test_data_bl$in_hosp_death, rfm_pred_prob)
 
-rfm_auc = round(auc(roc.test), 4) # AUROC
+rfm_auc = round(auc(roc.test), 4) # AUROC - 0.6858
 
 # Plot of ROC Curve 
 plot(roc.test)
 
-# ggroc(roc.test, color = "steelblue", size = 1.7) + 
-#   ggtitle(paste0('ROC Curve for Random Forest at Baseline ', '(AUC = ', rfm_auc, ')')) + 
-#   theme_bw()
+ggroc(roc.test, color = "steelblue", size = 1.7) +
+  ggtitle(paste0('ROC Curve for Random Forest at Baseline ', '(AUC = ', rfm_auc, ')')) +
+  theme_bw()
 ```
 
-
-#### PR Curve ---- FIX THIS 
+#### PR Curve 
 
 ```{r}
+# Compute AUPRC
 set.seed(11022009)
-# Compute AUPRC of RF Model
-prc_obj = pr.curve(test_data_bl$in_hosp_death, as.numeric(rfm_pred), curve = T)
 
-auprc = round(prc_obj$auc.integral, 4) #AUPRC
+pred = prediction(rfm_pred_prob, test_data_bl$in_hosp_death)
+auc_PR = performance(pred, measure = "aucpr")
+auc_PR = auc_PR@y.values[[1]]
 
-# Plot of PR Curve 
-plot(prc_obj)
+
+# # Compute AUPRC of RF Model
+# prc_obj = pr.curve(test_data_bl$in_hosp_death, rfm_pred_prob, curve = T)
+# 
+# auprc = round(prc_obj$auc.integral, 4) #AUPRC
+# 
+# # Plot of PR Curve 
+# plot(prc_obj)
 
 ```
 
@@ -438,7 +459,7 @@ xgboost_test = xgb.DMatrix(data = X_test, label = y_test)
 
 
 set.seed(11022009)
-# XGBoost Model #
+# XGBoost Model using the default parameters #
 # Train an xgboost model using our training data - outputs training error
 xgb_bl = xgboost(data = xgboost_train, # independent variables training data
                  eta = 0.3, 
@@ -448,6 +469,7 @@ xgb_bl = xgboost(data = xgboost_train, # independent variables training data
                  objective = "binary:logistic", 
                  eval_metric = "auc") # AUC 
 
+# Given the time constraints of this project, the default parameters for the XGBoost model were used. In future work, we would like to perform a further analysis to determine the optimal values of the model parameters to give the lowest training AUC value  
 
 # Summary of XGBoost model
 summary(xgb_bl) 
@@ -458,33 +480,39 @@ summary(xgb_bl)
 
 ```{r}
 # Use model to get predictions on test data in terms of probabilities 
-xgb_pred_test = predict(xgb_bl, xgboost_test)
 
-# Convert probability predictions to 0's and 1's
-xgb_pred = as.numeric(pred_test > 0.5) # variable -- Any probability > 0.5 is classified as 1 and 0, otherwise 
+xgb_pred = predict(xgb_bl, xgboost_test, type = "prob")
 
 # Confusion matrix -- need to convert y_test and pred_y to factors first
-conf_mat = confusionMatrix(factor(y_test), factor(xgb_pred))
-print(conf_mat)
+cfm = table(y_test, ifelse(xgb_pred > 0.13, 1, 0), exclude = NULL)
+cfm
 
+# Classification accuracy 
+classification_accuracy = sum(diag(cfm)/sum(cfm))
 ```
+
 
 #### ROC Curve
 
 ```{r}
 set.seed(11022009)
-# Calculate AUC and plot AUC curve for XGBoost 
-roc_obj_xgb = roc(test_data_bl$in_hosp_death, as.numeric(xgb_pred))
-auroc_xgb = round(auc(roc_obj_xgb), 4) # AUROC
+# Computed AUROC for XGBoost model 
+xgb_results = as.numeric(ifelse(xgb_pred == 1, 1, 0))
+xgb_roc.test = roc(y_test, xgb_pred)
+xgb_auc = auc(xgb_roc.test)
 
-# ROC Curve in ggplot 
-ggroc(roc_obj_xgb, color = "steelblue", size = 0.7) + 
-  ggtitle(paste0('ROC Curve for XGBoost Model at Baseline ', '(AUC = ', auroc_xgb, ')')) + 
-  theme_bw()
+plot(xgb_roc.test)
+```
 
-# ROC curve in base R 
-roc_obj_xgb2 = roc.curve(test_data_bl$in_hosp_death, as.numeric(xgb_pred), curve = T)
-plot(roc_obj_xgb2)
+### PR Curve 
+```{r}
+set.seed(11022009)
+
+# Compute AUPRC
+pred = prediction(xgb_pred, y_test)
+auc_PR = performance(pred, measure = "aucpr")
+auc_PR = auc_PR@y.values[[1]]
+
 ```
 
 The AUROC of the XGBoost model is 0.5083 which is lower than the AUROC of the RF model. Based on the AUROC metric, Random Forest seems to perform better than XGBoost in predicting in-hospital death based on baseline characteristics Age, Gender, BMI, and ICU Type.
@@ -493,6 +521,13 @@ The AUROC of the XGBoost model is 0.5083 which is lower than the AUROC of the RF
 ```{r}
 set.seed(11022009)
 # Compute AUPRC of XGBoost Model
+
+
+
+
+
+
+
 prc_obj = pr.curve(test_data_bl$in_hosp_death, as.numeric(xgb_pred), curve = T)
 
 auprc = round(prc_obj$auc.integral, 4) #AUPRC
