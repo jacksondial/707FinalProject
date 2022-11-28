@@ -209,7 +209,7 @@ summary(pr_comp_mean)
 most_contribution <- data.frame(abs(pr_comp_mean$rotation[,1:2])) %>% 
   mutate(var = rownames(.), Total_PC = (PC1 +PC2)) %>% 
   arrange(desc(Total_PC))
-head(most_contribution)
+head(most_contribution, 20)
 ```
 
 

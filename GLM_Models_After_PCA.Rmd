@@ -13,7 +13,9 @@ library(lme4)
 library(flextable)
 library(pROC)
 library(ROCR)
+library(reticulate)
 ```
+
 
 ## Import Data
 
@@ -104,12 +106,31 @@ ggplot()+
 ```
 
 
+
+
 ```{r}
-aucpr2 <- performance(pred2, measure = "aucpr")
-auc_PR2 <- aucpr2@y.values[[1]]
+y <- mean_test$in_hosp_death # logical array of positive / negative cases
+predictions <- prediction2 # array of predictions
+
+compare <- prediction(predictions, y)
+
+# Recall-Precision curve             
+RP.perf <- performance(compare, "prec", "rec")
+
+plot (RP.perf)
+
+# ROC curve
+ROC.perf <- performance(compare, "tpr", "fpr")
+plot (ROC.perf)
+
+# ROC area under the curve
+auc.tmp <- performance(compare,"auc")
+auc <- as.numeric(auc.tmp@y.values)
 ```
 
-
-
+```{r}
+aucpr2 <- performance(compare, measure = "aucpr")
+auc_PR2 <- aucpr2@y.values[[1]]
+```
 
 
