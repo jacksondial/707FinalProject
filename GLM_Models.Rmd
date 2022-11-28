@@ -1,0 +1,76 @@
+---
+title: "Fitting Generlized Linear Models"
+author: "Hannah Damico"
+date: "2022-11-26"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(magrittr)
+library(lme4)
+library(flextable)
+library(DataExplorer)
+```
+
+
+## Import Data
+```{r}
+train <- read.csv("imputed_train.csv")
+test <- read.csv("imputed_test.csv")
+```
+
+
+
+### Fit a Saturated Logistic GLM  
+This saturated model will help to identify variables that are significant with respect to our primary outcome of in hospital death. This model is fit with data that contains NA values, but opts to remove them in order to fit the model.
+
+
+```{r}
+train_1 <-  train %>% 
+  filter(Interval == 1) %>% 
+  select(-X, - subjid, -Interval, -Gender, -ICUType, -MechVent, -MechVent_cleaned,- in_hosp_death, -Time, -Hour) %>% mutate_all(~(scale(.) %>% as.vector))
+
+scaled_df1 <- cbind(subjid = train$subjid[train$Interval==1], Interval = train$Interval[train$Interval==1], in_hosp_death = train$in_hosp_death[train$Interval==1], Gender = train$Gender[train$Interval==1], train_1)
+
+train_TRY <-  train  %>% 
+  select(-X, - subjid, -Interval, -Gender, -ICUType, -MechVent, -MechVent_cleaned,- in_hosp_death, -Time, -Hour) %>% mutate_all(~(scale(.) %>% as.vector))
+
+scaled_df1_TRY <- cbind(subjid = train$subjid, Interval = train$Interval, in_hosp_death = train$in_hosp_death, Gender = train$Gender, ICUType = train$ICUType, train_TRY)
+
+
+```
+
+# Intercept Only Model accounting for repeated measures per subject ID
+
+```{r}
+intercept <- glmer(in_hosp_death ~ . + (1 | subjid),family = binomial, data = scaled_df1_TRY, na.action = na.omit)
+summary(intercept)
+```
+
+
+```{r}
+results <- glmer(in_hosp_death ~ Gender + Age + (1 + Interval | subjid),family = binomial, data = scaled_df1_TRY, na.action = na.omit)
+summary(results)
+```
+
+
+```{r}
+int_slope2 <- glmer(in_hosp_death ~ . - Lactate -  SaO2 - NIDiasABP - NISysABP- FiO2 + (1 + Interval | subjid),family = binomial, data = scaled_df1_TRY, na.action = na.omit)
+summary(int_slope2)
+```
+
+
+
+```{r}
+# scaled_means <- mean_values_frame %>% 
+#   mutate_at(vars(- subjid, -Interval, -Gender, -ICUType, -MechVent, -MechVent_cleaned,- in_hosp_death, -Hour), ~ scale(.) %>%  as.vector)
+# 
+# 
+# scaled_model <- glmer(in_hosp_death ~ . - Lactate -  SaO2 - NIDiasABP - NISysABP- FiO2 + (1 + Interval | subjid),family = binomial, data = scaled_means)
+# summary(scaled_model)
+```
+
+
+

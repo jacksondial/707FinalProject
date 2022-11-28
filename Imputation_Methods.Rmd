@@ -22,7 +22,6 @@ library(here)
 # setwd("/Users/hannahdamico/Desktop/F22/707 - Machine Learning/707FinalProject/")
 ```
 
-/Users/hannahdamico/Desktop/F22/707 - Machine Learning/707FinalProject/train.csv
 
 ### Import Training and Testing Data
 
@@ -221,19 +220,6 @@ subset_train %>%
 
 ```
 
-### Mean Lab Value per Interval per Patient
-
-Taking the mean per interval per subject ID reduces the data by excluding all NA values and maintaining only 1 row of data per subject per interval.
-
-```{r}
-## Take the mean of lab value per subject ID per Interval
-mean_values_frame <- subset_train %>% 
-  na.omit() %>% 
-  group_by(Interval, subjid) %>% 
-  select(-Time, -X) %>% 
-  summarise_all("mean")
-```
-
 
 
 ## Addressing Missing Data for GLM
@@ -244,15 +230,19 @@ We will decide to impute the data both upwards and downwards per subject ID per 
 
 ### Imputing Missing Data - Training set
 
-```{r}
-lab_cols_train <- colnames(subset_train)[3:39]
+```{r warning=FALSE}
+lab_cols_train <- colnames(subset_train)
 
 # Fill/Impute Values upward then downward
+
+## Extra Filled Frame is for Comparison Purposes
+subset_train_filled <- subset_train %>% 
+  group_by(subjid) %>% 
+  tidyr::fill(lab_cols_train, .direction = c("updown"))
 
 subset_train <- subset_train %>% 
   group_by(subjid) %>% 
   tidyr::fill(lab_cols_train, .direction = c("updown"))
-
 
 ```
 
@@ -270,24 +260,31 @@ impute_mean <- function(variable){
 ## Apply function to columns of data grouped by subjid & Interval
 subset_train %<>% # CAUTION: the %<>% operator will save over your existing df, revert to %>% 
   group_by(subjid, Interval)  %>% 
-  summarise_at(vars(-X), "impute_mean")
+  summarise_all("impute_mean") 
+
 
 # Uncomment this code and run the above lines to see change in count of missing data
-# %>% 
-#   summarise_all("is.na") %>% 
+# %>%
+#   summarise_all("is.na") %>%
 #   summarise_all("sum")
 ```
 
 ### Imputing Missing Data - Testing set
 
 ```{r}
-lab_cols_test <- colnames(subset_test)[3:38]
+lab_cols_test <- colnames(subset_test)
 
 # Fill/Impute Values upward then downward
+
+## Extra Filled Frame is for Comparison Purposes
+subset_test_filled <- subset_test %>% 
+  group_by(subjid) %>% 
+  tidyr::fill(lab_cols_test, .direction = c("updown"))
 
 subset_test <- subset_test %>% 
   group_by(subjid) %>% 
   tidyr::fill(lab_cols_test, .direction = c("updown"))
+
 
 
 ```
@@ -322,13 +319,65 @@ subset_test %>%
   summarise_all("sum")
 ```
 
+## OBSERVE DIFFERENCE IN MISSING DATA ACROSS DATA FRAMES 
+### After Imputation Methods
 
+### Training
 
-
-```{r fig.width=4, fig.height=4}
+```{r fig.width=5, fig.height=4.5}
+# No Imputation
+plot_missing(train_df[variables_kept])
+# Imputation Using filling updown method
+#plot_missing(subset_train_filled)
 plot_missing(subset_train)
+```
+
+
+
+### Testing Set
+
+```{r fig.width=5, fig.height=4.5}
+# No Imputation
+plot_missing(test_df[variables_kept_test])
+# Imputation Using Updown method
 plot_missing(subset_test)
 ```
+
+## Compare Missing Data in Original Data vs. Imputed Data
+
+```{r}
+# Training
+# Only 42% of the missing data that existed before still remains after imputation
+length(which(is.na(subset_train))) / 
+  length(which(is.na(train_df[variables_kept])))
+
+# Testing
+# Only 42% of the missing data that existed before still remains after imputation
+length(which(is.na(subset_test))) / 
+  length(which(is.na(test_df[variables_kept])))
+```
+
+### Mean Lab Value per Interval per Patient
+
+Taking the mean per interval per subject ID reduces the data by excluding all NA values and maintaining only 1 row of data per subject per interval.
+
+```{r}
+## Take the mean of lab value per subject ID per Interval
+mean_train_frame <- subset_train %>% 
+  na.omit() %>% 
+  group_by(Interval, subjid) %>% 
+  select(-X, -Hour, -Time) %>% 
+  summarise_all("mean")
+
+mean_test_frame <- subset_test %>% 
+  na.omit() %>% 
+  group_by(Interval, subjid) %>% 
+  select(-Time, -Hour) %>% 
+  summarise_all("mean")
+```
+
+
+
 
 ### Write .csv Files of the imputed data
 
@@ -338,12 +387,10 @@ plot_missing(subset_test)
 ```
 
 
-### Fit a Saturated Logistic GLM  
-This saturated model will help to identify variables that are significant with respect to our primary outcome of in hospital death. This model is fit with data that contains NA values, but opts to remove them in order to fit the model.
-
+### Write .csv Files of the imputed mean data
+This dataset contains one value per subject per interval.
 ```{r}
-saturated_model <- glmer(in_hosp_death ~ . -Time - MechVent - MechVent_cleaned + (1 + Interval | subjid), data = subset_train,family = binomial(link = "logit"), na.action = na.omit)
-
-summary(saturated_model)
+write.csv(mean_train_frame, "mean_train_frame.csv")
+write.csv(mean_test_frame, "mean_test_frame.csv")
 ```
 
