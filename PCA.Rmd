@@ -213,8 +213,10 @@ head(most_contribution, 20)
 ```
 
 
-```{r}
-fviz_pca_biplot(pr_comp_mean, repel = TRUE, label = "var", select.var = list(contrib = 4), arrowsize = 0.75, alpha.ind = 0.1, col.var = "blue",title = "PCA Biplot with top 4 contributing variables")
+```{r fig.width = 5, fig.height = 4}
+contribution_plot <- fviz_pca_biplot(pr_comp_mean, repel = TRUE, label = "var", select.var = list(contrib = 10), arrowsize = 0.75, alpha.ind = 0.1, col.var = "blue",title = "PCA Biplot with top 4 contributing variables")
+contribution_plot
+ggsave("contribution_plot.jpg", contribution_plot)
 ```
 
 
