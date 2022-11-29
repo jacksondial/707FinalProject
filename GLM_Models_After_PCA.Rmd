@@ -106,31 +106,14 @@ ggplot()+
 ```
 
 
+### Testing Data
 
 
 ```{r}
-y <- mean_test$in_hosp_death # logical array of positive / negative cases
-predictions <- prediction2 # array of predictions
-
-compare <- prediction(predictions, y)
-
-# Recall-Precision curve             
-RP.perf <- performance(compare, "prec", "rec")
-
-plot (RP.perf)
-
-# ROC curve
-ROC.perf <- performance(compare, "tpr", "fpr")
-plot (ROC.perf)
-
-# ROC area under the curve
-auc.tmp <- performance(compare,"auc")
-auc <- as.numeric(auc.tmp@y.values)
+results_test <- glmer(as.factor(in_hosp_death) ~ Platelets + Urine + PaO2 + BUN + WBC + Age + (1 + Interval | subjid),family = binomial(link = "logit"), data = mean_test, na.action = na.omit)
+summary(results_test)
 ```
 
-```{r}
-aucpr2 <- performance(compare, measure = "aucpr")
-auc_PR2 <- aucpr2@y.values[[1]]
-```
+
 
 
