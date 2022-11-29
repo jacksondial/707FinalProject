@@ -1,0 +1,484 @@
+---
+title: "Random Forest and XGBoost Modeling"
+author: "Grace Kovic"
+date: '2022-11-26'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Change Log
+
+```{r}
+###########################################################################
+# Change Log: 
+# Version 1: Performed Random Forest and XGBoost Modeling for Age, Gender, Height and ICU Type 
+# Version 2: Removed commented out code that's no longer needed and complete interpretation of models 
+
+```
+
+```{r message=FALSE, warning=FALSE}
+# Libraries 
+library(randomForest)
+library(ROCR)
+library(pROC)
+library(PRROC)
+library(ggRandomForests)
+library(LongituRF)
+library(xgboost)
+library(caret)
+library(tidyverse)
+library(ggplot2)
+library(Matrix)
+library(Ckmeans.1d.dp)
+library(DataExplorer)
+library(dplyr)
+```
+
+### Data 
+
+```{r}
+# Read in data 
+train_data = read.csv("/Users/KovicFamily/Documents/Duke MB/Courses/2022-2023 Courses/Fall 2022/BIOSTAT 707 - Stat Machine Learning/Final Project/707FinalProject/train.csv") %>% 
+  select(-1) %>% # Remove the extra index column 
+  rename(Height = height_cleaned) # rename height variable 
+
+test_data = read.csv("/Users/KovicFamily/Documents/Duke MB/Courses/2022-2023 Courses/Fall 2022/BIOSTAT 707 - Stat Machine Learning/Final Project/707FinalProject/test.csv") %>% 
+  select(-1) %>% # Remove the extra index column 
+  rename(Height = height_cleaned) # rename height variable 
+
+# Imputed training and testing data with interval variable split at every 12 hours of the total 48 hour period and the mean value of the feature calculated for each individual per interval  
+imputed_train = read.csv("/Users/KovicFamily/Documents/Duke MB/Courses/2022-2023 Courses/Fall 2022/BIOSTAT 707 - Stat Machine Learning/Final Project/mean_train_frame.csv") %>% 
+  select(-1) %>% # Remove the extra index column 
+  rename(Height = height_cleaned) # rename height variable 
+
+imputed_test = read.csv("/Users/KovicFamily/Documents/Duke MB/Courses/2022-2023 Courses/Fall 2022/BIOSTAT 707 - Stat Machine Learning/Final Project/mean_test_frame.csv") %>% 
+  select(-1) %>% # Remove the extra index column 
+  rename(Height = height_cleaned) # rename height variable 
+```
+
+### Cleaning Baseline Data 
+
+```{r}
+# str(test_data)
+# str(train_data)
+# summary(test_data)
+# summary(train_data)
+
+# For training and testing data, convert in_hosp_death and Gender to factors to fit a classification RF model
+# Training
+train_data$in_hosp_death = as.factor(train_data$in_hosp_death)
+train_data$Gender = as.factor(train_data$Gender)
+train_data$ICUType = as.factor(train_data$ICUType)
+
+train_data$Height_m = (train_data$Height)/100 # created a height variable in meters 
+
+# Testing
+test_data$in_hosp_death = as.factor(test_data$in_hosp_death)
+test_data$Gender = as.factor(test_data$Gender)
+test_data$ICUType = as.factor(test_data$ICUType)
+
+test_data$Height_m = (test_data$Height)/100 # created a height variable in meters 
+```
+
+
+```{r}
+
+# Subset train_data and test_data to just contain baseline characteristics collected at time of ICU admission (Age, Gender, BMI, ICU Type) and in_hosp_death
+
+# Remove subjid column in train_data and test_data for modeling purposes  
+
+# Created a BMI variable using Weight and Height
+
+train_data_bl = train_data %>% 
+  group_by(subjid) %>% 
+  slice(1) %>% # extracts the first instance for every individual in the data
+  ungroup() %>% 
+  dplyr::select(-c(subjid)) %>% # remove subjid for modeling purposes 
+  dplyr::select(Age, Gender, Height_m, Weight, ICUType, in_hosp_death) %>% 
+  mutate(BMI = Weight/(Height_m^2)) %>% 
+  subset(select = -c(Weight, Height_m)) # Remove Weight and Height_m from train data
+
+test_data_bl = test_data %>% 
+  group_by(subjid) %>% 
+  slice(1) %>% 
+  ungroup() %>% 
+  dplyr::select(-c(subjid)) %>% 
+  dplyr::select(Age, Gender, Height_m, Weight, ICUType, in_hosp_death) %>% 
+  mutate(BMI = Weight/(Height_m^2)) %>% 
+  subset(select = -c(Weight, Height_m)) # Remove Weight and Height from test data
+
+```
+
+### Cleaning Imputed Data
+**Repeated Measures for all features are kept for longitudinal modeling**
+
+```{r}
+# For training and testing data, Make in_hosp_death and Gender factors to fit a classification RF model
+# Training 
+imputed_train$in_hosp_death = as.factor(imputed_train$in_hosp_death) 
+imputed_train$Gender = as.factor(imputed_train$Gender)
+imputed_train$ICUType = as.factor(imputed_train$ICUType)
+
+imputed_train$Height_m = (imputed_train$Height)/100 # created a height variable in meters 
+
+# Testing 
+imputed_test$in_hosp_death = as.factor(imputed_test$in_hosp_death)
+imputed_test$Gender = as.factor(imputed_test$Gender)
+imputed_test$ICUType = as.factor(imputed_test$ICUType)
+
+imputed_test$Height_m = (imputed_test$Height)/100 # created a height variable in meters
+```
+
+```{r}
+# (1) Remove subjid column in train_data and test_data for modeling purposes  
+
+# (2) Subset train_data and test_data to features (excluding Weight and Height) and in_hosp_death
+
+# (3) Created a BMI variable using Weight and Height
+
+imputed_train_clean = imputed_train %>% 
+  dplyr::select(-c(subjid)) %>% # remove subjid for modeling purposes 
+  mutate(BMI = Weight/(Height_m^2)) %>% 
+  subset(select = -c(Weight, Height_m, Height)) # Remove Weight and Height vars from train data
+
+imputed_test_clean = imputed_test %>% 
+  dplyr::select(-c(subjid)) %>% 
+  mutate(BMI = Weight/(Height_m^2)) %>% 
+  subset(select = -c(Weight, Height_m, Height)) # Remove Weight and Height vars from train data
+```
+
+### RF Modeling Per Time Interval
+#### RF Modeling of for First 12 Hours   
+
+```{r}
+# Interval 1 training data 
+imputed_train_clean_interval1 = imputed_train_clean %>%
+  filter(Interval == 1) %>%
+  subset(select = -c(Interval)) # Remove extra variables 
+
+# Interval 1 testing data 
+imputed_test_clean_interval1 = imputed_test_clean %>%
+  filter(Interval == 1) %>%
+  subset(select = -c(Interval)) # Remove extra variables 
+
+```
+
+```{r}
+# Random Forest model for Interval 1 
+set.seed(11022009)
+rfm_interval1 = randomForest(in_hosp_death ~ ., data = imputed_train_clean_interval1, ntree = 500) 
+print(rfm_interval1)
+
+# Plot the test MSE by the number of trees used 
+plot(rfm_interval1) 
+
+# Based on the tuning results of RF model below, the optimal number of predictors per tree is 5 or 6
+
+# rfm_interval1_tune = tuneRF(imputed_train_clean_interval1, imputed_train_clean_interval1$in_hosp_death, stepFactor = 1.2, improve = 0.01, trace = T, plot = T)
+# 
+# rfm_interval1_train = train(form = in_hosp_death ~ ., data = imputed_train_clean_interval1, method = "rf")
+
+```
+
+
+#### Classification Accuracy of RF Model
+
+```{r}
+# This is dependent upon the threshold we set 
+
+set.seed(11022009)
+
+# Evaluate prediction accuracy
+rfm_interval1_pred = predict(rfm_interval1, imputed_test_clean_interval1[-32], type = "prob")
+
+rfm_interval1_pred_prob = rfm_interval1_pred[, 2]
+
+# Build Confusion Matrix 
+cfm = table(imputed_test_clean_interval1$in_hosp_death, ifelse(rfm_interval1_pred_prob > 0.13, 1, 0), exclude = NULL)
+cfm
+
+# Classification accuracy 
+classification_accuracy = sum(diag(cfm)/sum(cfm))
+
+```
+
+
+### ROC Curve 
+```{r}
+set.seed(11022009)
+
+# Compute AUROC of RF Model
+rfm_interval1_results = as.numeric(ifelse(rfm_interval1_pred == 1, 1, 0))
+rfm_interval1_roc.test = roc(imputed_test_clean_interval1$in_hosp_death, rfm_interval1_pred_prob)
+
+rfm_interval1_auc = round(auc(rfm_interval1_roc.test), 4)
+
+# Plot ROC curve 
+plot(rfm_interval1_roc.test)
+
+
+# Plot of ROC Curve 
+ggroc(rfm_interval1_roc.test, color = "steelblue", size = 1.7) + 
+  ggtitle(paste0('ROC Curve for Random Forest in Interval 1 ', '(AUC = ', rfm_interval1_auc, ')')) + 
+  theme_bw()
+```
+
+### PR Curve 
+```{r}
+pred = prediction(rfm_interval1_pred_prob, imputed_test_clean_interval1$in_hosp_death)
+
+auc_PR = performance(pred, measure = "aucpr")
+auc_PR = auc_PR@y.values[[1]]
+
+```
+
+
+#### Variable Importance Plot 
+```{r}
+# Create dataframe for variable importance plot 
+var_importance = data_frame(variable = setdiff(colnames(imputed_train_clean_interval1), "in_hosp_death"), 
+                            importance = as.vector(importance(rfm_interval1)))
+
+# Arrange all features in order of most to least important  
+var_importance = var_importance %>% 
+  arrange(desc(importance))
+
+# Make the variable in var_importance a factor for plotting purposes 
+var_importance$variable = factor(var_importance$variable, 
+                                 levels = var_importance$variable)
+
+# RF Variable Importance plot 
+p = ggplot(var_importance, aes(x=variable, weight=importance))
+p = p + geom_bar(fill = "steelblue") + ggtitle("Variable Importance from RF Model in First 12 Hrs of Hospitalization")
+p = p + xlab("Features") + ylab("Variable Importance (Mean Decrease in Gini Index)")
+#p = p + scale_fill_discrete(name="Variable Name")
+p + theme(axis.text.x = element_text(size=12),
+          axis.text.y=element_text(size=12),
+          axis.title=element_text(size=16),
+          plot.title=element_text(size=18),
+          legend.position = "none") + 
+  coord_flip() + 
+  theme_bw()
+
+```
+The plot above indicates that Age and BUN are the largest contributors to the prediction of in-hospital death when analyzing the first 12 hours of ICU Hospitalization. 
+
+
+### RF Modeling of Baseline Features
+
+```{r}
+# Classification Random Forest model using baseline features  - Using 500 trees
+# BMI was used in place of Height and Weight 
+set.seed(11022009)
+rfm_bl = randomForest(in_hosp_death ~ ., data = train_data_bl) 
+print(rfm_bl)
+
+plot(rfm_bl)
+
+# Since our dataset contains a large number of individuals, the default number of parameters of 500 was used for both the random forest model on the baseline measurements and on the first 12 hours of the study period
+```
+ 
+
+```{r}
+# Classification Random Forest model using baseline features
+# Using 100 trees based on plot above 
+# BMI was used in place of Height and Weight 
+set.seed(11022009)
+rfm_bl_test = randomForest(in_hosp_death ~ ., data = train_data_bl, ntree = 100) 
+print(rfm_bl_test)
+
+```
+
+
+#### Classification Accuracy of RF Model
+
+```{r}
+# This is dependent upon the threshold we set 
+
+set.seed(11022009)
+# Matrix of probabilities of death and no death  
+rfm_pred = predict(rfm_bl, test_data_bl[-4], type = "prob") 
+
+rfm_pred_prob = rfm_pred[, 2] # Predicted probabilities of dying 
+
+# Build Confusion Matrix 
+# If the probability of dying is > 13%, then one is classified as a non-survivor (coded as 1). Otherwise, one is classified as a survivor (coded as 0)
+cfm = table(test_data_bl$in_hosp_death, ifelse(rfm_pred_prob > 0.13, 1, 0), exclude = NULL)
+cfm
+
+# Classification accuracy 
+classification_accuracy = sum(diag(cfm)/sum(cfm))
+
+```
+
+
+#### ROC Curve
+
+```{r}
+set.seed(11022009)
+# Compute AUROC of RF Model
+rfm_results = as.numeric(ifelse(rfm_pred == 1, 1, 0)) 
+
+roc.test = roc(test_data_bl$in_hosp_death, rfm_pred_prob)
+
+rfm_auc = round(auc(roc.test), 4)
+
+# Plot of ROC Curve 
+plot(roc.test)
+
+# ggroc(roc.test, color = "steelblue", size = 1.7) +
+#   ggtitle(paste0('ROC Curve for Random Forest at Baseline ', '(AUC = ', rfm_auc, ')')) +
+#   theme_bw()
+```
+
+#### PR Curve 
+
+```{r}
+set.seed(11022009)
+
+# Compute AUPRC
+pred = prediction(rfm_pred_prob, test_data_bl$in_hosp_death)
+auc_PR = performance(pred, measure = "aucpr")
+auc_PR = auc_PR@y.values[[1]]
+print(auc_PR)
+
+```
+
+
+  #### RF Variable Importance Plot
+
+```{r}
+# Create dataframe for variable importance plot 
+var_importance = data_frame(variable = setdiff(colnames(train_data_bl), "in_hosp_death"), 
+                            importance = as.vector(importance(rfm_bl)))
+
+# Arrange Age, Gender, BMI and ICU type in order of most to least important  
+var_importance = var_importance %>% 
+  arrange(desc(importance)) 
+
+# Make the variable in var_importance a factor for plotting purposes 
+var_importance$variable = factor(var_importance$variable, 
+                                 levels = var_importance$variable)
+
+# RF Variable Importance plot 
+p = ggplot(var_importance, aes(x=variable, weight=importance))
+p = p + geom_bar(fill = "steelblue") + ggtitle("Variable Importance from Random Forest of Baseline Features")
+p = p + xlab("Demographic Attribute") + ylab("Variable Importance (Mean Decrease in Gini Index)")
+#p = p + scale_fill_discrete(name="Variable Name")
+p + theme(axis.text.x = element_text(size=12),
+          axis.text.y=element_text(size=12),
+          axis.title=element_text(size=16),
+          plot.title=element_text(size=18),
+          legend.position = "none") + 
+  coord_flip() + 
+  theme_bw()
+
+```
+
+Based on the importance plot above, BMI has the largest decrease in the Gini index averaged over 500 trees, followed by Age. This indicates that BMI and Age are the two largest contributors to the ability of the Random Forest model to predict in-hospital death.
+
+
+### XGB Model of Baseline Features
+```{r}
+# Independent variables for train
+X_train = data.matrix(train_data_bl[, -4])
+
+# Dependent variable for train
+y_train = data.matrix(ifelse(train_data_bl[, 4] == 1, 1, 0))
+
+# Independent variables for test
+X_test = data.matrix(test_data_bl[, -4])
+
+# Dependent variable for test
+y_test = data.matrix(ifelse(test_data_bl[, 4] == 1, 1, 0))
+
+# Convert the train and test data into xgboost matrix type 
+xgboost_train = xgb.DMatrix(data = X_train, label = y_train)
+xgboost_test = xgb.DMatrix(data = X_test, label = y_test)
+
+
+set.seed(11022009)
+# XGBoost Model using the default parameters #
+# Train an xgboost model using our training data - outputs training error
+xgb_bl = xgboost(data = xgboost_train, # independent variables training data
+                 eta = 0.3, 
+                 max.depth = 6,
+                 nround = 100, 
+                 print_every_n = 10, 
+                 objective = "binary:logistic", 
+                 eval_metric = "auc") # AUC 
+
+# Given the time constraints of this project, the default parameters for the XGBoost model were used. In future work, we would like to perform a further analysis to determine the optimal values of the model parameters to give the lowest training AUC value  
+
+# Summary of XGBoost model
+summary(xgb_bl) 
+```
+
+
+#### XGB Model Predictions
+
+```{r}
+# Use model to get predictions on test data in terms of probabilities 
+
+xgb_pred = predict(xgb_bl, xgboost_test, type = "prob")
+
+# Confusion matrix -- need to convert y_test and pred_y to factors first
+cfm = table(y_test, ifelse(xgb_pred > 0.13, 1, 0), exclude = NULL)
+cfm
+
+# Classification accuracy 
+classification_accuracy = sum(diag(cfm)/sum(cfm))
+```
+
+
+#### ROC Curve
+
+```{r}
+set.seed(11022009)
+# Computed AUROC for XGBoost model 
+xgb_results = as.numeric(ifelse(xgb_pred == 1, 1, 0))
+xgb_roc.test = roc(y_test, xgb_pred)
+xgb_auc = auc(xgb_roc.test)
+
+plot(xgb_roc.test)
+```
+
+### PR Curve 
+```{r}
+set.seed(11022009)
+
+# Compute AUPRC
+pred = prediction(xgb_pred, y_test)
+auc_PR = performance(pred, measure = "aucpr")
+auc_PR = auc_PR@y.values[[1]]
+
+```
+
+
+#### XGB Variable Importance
+
+```{r}
+# Variable Importance Plot for XGBoost
+importance_xgb = xgb.importance(colnames(xgboost_train), model = xgb_bl)
+xgb_imp_plot = xgb.ggplot.importance(importance_xgb, top_n = 4) 
+xgb_imp_plot + theme(legend.position = "none", 
+          axis.text.y=element_text(size=12),
+          axis.title=element_text(size=16),
+          plot.title=element_text(size=18),
+          legend.title=element_text(size=16),
+          legend.text=element_text(size=12)) + 
+  ggtitle("Feature Importance for XGBoost")
+
+```
+
+Based on the plot of feature importance, BMI is the largest contributor to the ability of the XGBoost model to predict in-hospital death followed by Age, ICUType and Gender. The results are consistent with the Random Forest model except that Gender follows a bit farther behind in importance compared to in the Random Forest model.
+
+```{r}
+# Output importance matrix for XGBoost
+print(importance_xgb)
+```
+
+The importance matrix of XGBoost above restates the results shown in the plot above which is that BMI is the most important in predicting in-hospital death and Gender the least important.
