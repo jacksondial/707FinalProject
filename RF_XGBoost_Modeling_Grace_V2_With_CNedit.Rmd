@@ -314,11 +314,6 @@ classification_accuracy = sum(diag(cfm)/sum(cfm))
 
 ```
 
-The classification accuracy of the Random Forest model for in-hospital death is approximately 65.5% meaning that the model correctly classifies or predicts individuals as either a survivor or as dead 65.5% of the time
-
-
-The RF model above contains Age, Gender, BMI, and ICUType as the features. The model correctly predicted in-hospital death with an error rate of 7.97% and correctly predicted no in-hospital death at an error rate of 0.047%.
-
 
 #### ROC Curve
 
@@ -329,34 +324,26 @@ rfm_results = as.numeric(ifelse(rfm_pred == 1, 1, 0))
 
 roc.test = roc(test_data_bl$in_hosp_death, rfm_pred_prob)
 
-rfm_auc = round(auc(roc.test), 4) # AUROC - 0.6858
+rfm_auc = round(auc(roc.test), 4)
 
 # Plot of ROC Curve 
 plot(roc.test)
 
-ggroc(roc.test, color = "steelblue", size = 1.7) +
-  ggtitle(paste0('ROC Curve for Random Forest at Baseline ', '(AUC = ', rfm_auc, ')')) +
-  theme_bw()
+# ggroc(roc.test, color = "steelblue", size = 1.7) +
+#   ggtitle(paste0('ROC Curve for Random Forest at Baseline ', '(AUC = ', rfm_auc, ')')) +
+#   theme_bw()
 ```
 
 #### PR Curve 
 
 ```{r}
-# Compute AUPRC
 set.seed(11022009)
 
+# Compute AUPRC
 pred = prediction(rfm_pred_prob, test_data_bl$in_hosp_death)
 auc_PR = performance(pred, measure = "aucpr")
 auc_PR = auc_PR@y.values[[1]]
-
-
-# # Compute AUPRC of RF Model
-# prc_obj = pr.curve(test_data_bl$in_hosp_death, rfm_pred_prob, curve = T)
-# 
-# auprc = round(prc_obj$auc.integral, 4) #AUPRC
-# 
-# # Plot of PR Curve 
-# plot(prc_obj)
+print(auc_PR)
 
 ```
 
@@ -416,7 +403,7 @@ y_test = as.numeric(as.character(imputed_test_clean_interval1[, 32])) # Must mak
 xgboost_train = xgb.DMatrix(data = X_train, label = y_train)
 xgboost_test = xgb.DMatrix(data = X_test, label = y_test)
 
-set.seed(11022009) # using seed that Jackson used to generate training and testing data 
+set.seed(11022009) 
 
 # XGBoost Model #
 # Train an xgboost model using our training data - outputs training error
@@ -424,17 +411,14 @@ xgb_interval1 = xgboost(data = xgboost_train, # independent variables training d
                  eta = 1, 
                  max.depth = 4, 
                  nthread = 2, 
-                 nrounds = 10, # Should this be increased or decreased ?
+                 nrounds = 10, 
                  objective = "binary:logistic", # classification XGBoost
                  eval_metric = "auc") # AUC 
 
 
-# Summary of XGBoost model
 summary(xgb_interval1) 
 
 ```
-
-Based on the AUC values for each of the 10 rounds that the XGBoost model was ran, the AUC jumps from 0.79 to 0.90 in the first round after which it begins to slow down, reaching approximately 98% at round 10.
 
 
 
@@ -512,28 +496,6 @@ set.seed(11022009)
 pred = prediction(xgb_pred, y_test)
 auc_PR = performance(pred, measure = "aucpr")
 auc_PR = auc_PR@y.values[[1]]
-
-```
-
-The AUROC of the XGBoost model is 0.5083 which is lower than the AUROC of the RF model. Based on the AUROC metric, Random Forest seems to perform better than XGBoost in predicting in-hospital death based on baseline characteristics Age, Gender, BMI, and ICU Type.
-
-#### PR Curve 
-```{r}
-set.seed(11022009)
-# Compute AUPRC of XGBoost Model
-
-
-
-
-
-
-
-prc_obj = pr.curve(test_data_bl$in_hosp_death, as.numeric(xgb_pred), curve = T)
-
-auprc = round(prc_obj$auc.integral, 4) #AUPRC
-
-# Plot of PR Curve 
-plot(prc_obj)
 
 ```
 
